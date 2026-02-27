@@ -32,7 +32,7 @@ type Campaign struct {
 
 type CampaignSnapshot struct {
 	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	CampaignPID   string    `gorm:"index;not null" json:"campaign_pid"`
+	CampaignPID   string    `gorm:"column:campaign_pid;index;not null" json:"campaign_pid"`
 	PledgedAmount float64   `json:"pledged_amount"`
 	PercentFunded float64   `json:"percent_funded"`
 	SnapshotAt    time.Time `gorm:"index;not null;default:now()" json:"snapshot_at"`
