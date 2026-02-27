@@ -84,6 +84,10 @@ func main() {
 			alerts.DELETE("/:id", handler.DeleteAlert)
 			alerts.GET("/:id/matches", handler.GetAlertMatches)
 		}
+
+		if cronSvc != nil {
+			api.POST("/admin/backfill", handler.TriggerBackfill(cronSvc))
+		}
 	}
 
 	log.Printf("KickWatch API starting on :%s", cfg.Port)
