@@ -103,6 +103,10 @@ actor APIClient {
     private let baseURL: String
     private let session: URLSession
 
+    // History cache: pid → (snapshots, fetchedAt). Actor isolation makes this thread-safe.
+    private var historyCache: [String: (data: [CampaignSnapshotDTO], fetchedAt: Date)] = [:]
+    private let historyCacheTTL: TimeInterval = 300 // 5 minutes
+
     init(baseURL: String? = nil) {
         #if DEBUG
         self.baseURL = baseURL ?? "https://api-dev.kickwatch.rescience.com"
@@ -164,7 +168,12 @@ actor APIClient {
     }
 
     func fetchCampaignHistory(pid: String) async throws -> [CampaignSnapshotDTO] {
-        return try await get(url: URL(string: baseURL + "/api/campaigns/\(pid)/history")!)
+        if let cached = historyCache[pid], Date().timeIntervalSince(cached.fetchedAt) < historyCacheTTL {
+            return cached.data
+        }
+        let result: [CampaignSnapshotDTO] = try await get(url: URL(string: baseURL + "/api/campaigns/\(pid)/history")!)
+        historyCache[pid] = (data: result, fetchedAt: Date())
+        return result
     }
 
     func fetchAlertMatches(alertID: String) async throws -> [CampaignDTO] {

@@ -35,6 +35,49 @@ func Init(cfg *config.Config) error {
 	sqlDB.SetMaxOpenConns(20)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
+	// Pre-migration: make campaign_snapshots safe for AutoMigrate.
+	// AutoMigrate would fail trying to ADD COLUMN snapshot_date NOT NULL on an
+	// existing table with rows. We handle it here before AutoMigrate runs.
+	if err := DB.Exec(`
+		DO $$
+		BEGIN
+			-- Only needed when the table already exists (subsequent deploys).
+			IF EXISTS (
+				SELECT 1 FROM information_schema.tables
+				WHERE table_name = 'campaign_snapshots'
+			) THEN
+				-- Add snapshot_date as nullable if missing, backfill from snapshot_at.
+				IF NOT EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_name = 'campaign_snapshots' AND column_name = 'snapshot_date'
+				) THEN
+					ALTER TABLE campaign_snapshots ADD COLUMN snapshot_date date;
+					UPDATE campaign_snapshots SET snapshot_date = DATE(snapshot_at);
+				END IF;
+
+				-- Add backers_count if missing (added alongside snapshot_date).
+				IF NOT EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_name = 'campaign_snapshots' AND column_name = 'backers_count'
+				) THEN
+					ALTER TABLE campaign_snapshots ADD COLUMN backers_count int DEFAULT 0;
+				END IF;
+
+				-- Deduplicate: keep only the latest snapshot per (campaign_pid, snapshot_date).
+				DELETE FROM campaign_snapshots a USING campaign_snapshots b
+				WHERE a.campaign_pid = b.campaign_pid
+				  AND a.snapshot_date = b.snapshot_date
+				  AND a.snapshot_at < b.snapshot_at;
+
+				-- Set NOT NULL now that all rows have a value.
+				ALTER TABLE campaign_snapshots ALTER COLUMN snapshot_date SET NOT NULL;
+			END IF;
+		END
+		$$;
+	`).Error; err != nil {
+		return fmt.Errorf("pre-migrate campaign_snapshots: %w", err)
+	}
+
 	if err := DB.AutoMigrate(
 		&model.Campaign{},
 		&model.CampaignSnapshot{},
