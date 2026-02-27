@@ -29,21 +29,38 @@ func NewKickstarterScrapingService(apiKey string, maxConcurrent int) *Kickstarte
 func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor string, first int) (*SearchResult, error) {
 	ctx := context.Background()
 
-	// Build Kickstarter discover URL
-	discoverURL := s.buildDiscoverURL(term, categoryID, sort, 1) // TODO: handle cursor-based pagination
+	// Parse page from cursor (cursor format: "page:N")
+	page := 1
+	if cursor != "" {
+		if _, err := fmt.Sscanf(cursor, "page:%d", &page); err != nil {
+			page = 1
+		}
+	}
+
+	// Build Kickstarter discover URL with page
+	discoverURL := s.buildDiscoverURL(term, categoryID, sort, page)
 
 	// Try AI extraction first
-	aiQuery := "Extract all projects from this page. For each project return: name, slug, goal amount, pledged amount, currency, deadline date, creator name, category, photo URL, blurb."
+	aiQuery := "Extract all projects from this page. For each project return: name, slug, project_url (full Kickstarter URL), goal amount, pledged amount, currency, deadline date, creator name, category, photo URL, blurb."
 
 	aiResult, err := s.client.ExtractWithAI(ctx, discoverURL, aiQuery)
 	if err == nil {
 		campaigns, parseErr := s.parseAIResponse(aiResult)
 		if parseErr == nil && len(campaigns) > 0 {
-			log.Printf("AI extraction successful: found %d campaigns", len(campaigns))
+			log.Printf("AI extraction successful: found %d campaigns (page %d)", len(campaigns), page)
+
+			// Generate next cursor if we got a full page
+			nextCursor := ""
+			hasNextPage := len(campaigns) >= first
+			if hasNextPage {
+				nextCursor = fmt.Sprintf("page:%d", page+1)
+			}
+
 			return &SearchResult{
 				Campaigns:   campaigns,
 				TotalCount:  len(campaigns),
-				HasNextPage: len(campaigns) >= first,
+				NextCursor:  nextCursor,
+				HasNextPage: hasNextPage,
 			}, nil
 		}
 		log.Printf("AI extraction parse failed: %v, falling back to HTML", parseErr)
@@ -62,12 +79,20 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	log.Printf("HTML parsing successful: found %d campaigns", len(campaigns))
+	log.Printf("HTML parsing successful: found %d campaigns (page %d)", len(campaigns), page)
+
+	// Generate next cursor if we got a full page
+	nextCursor := ""
+	hasNextPage := len(campaigns) >= first
+	if hasNextPage {
+		nextCursor = fmt.Sprintf("page:%d", page+1)
+	}
 
 	return &SearchResult{
 		Campaigns:   campaigns,
 		TotalCount:  len(campaigns),
-		HasNextPage: len(campaigns) >= first,
+		NextCursor:  nextCursor,
+		HasNextPage: hasNextPage,
 	}, nil
 }
 
@@ -143,6 +168,7 @@ func (s *KickstarterScrapingService) parseAIResponse(jsonData string) ([]model.C
 		Projects []struct {
 			Name         string  `json:"name"`
 			Slug         string  `json:"slug"`
+			ProjectURL   string  `json:"project_url"`
 			Goal         float64 `json:"goal"`
 			Pledged      float64 `json:"pledged"`
 			Currency     string  `json:"currency"`
@@ -189,8 +215,15 @@ func (s *KickstarterScrapingService) parseAIResponse(jsonData string) ([]model.C
 			}
 		}
 
-		// Build project URL
-		if campaign.Slug != "" {
+		// Use project URL from AI if provided, otherwise build from slug
+		if p.ProjectURL != "" {
+			campaign.ProjectURL = p.ProjectURL
+			// Extract PID from URL or use slug
+			campaign.PID = extractPIDFromURL(p.ProjectURL)
+			if campaign.PID == "" {
+				campaign.PID = campaign.Slug
+			}
+		} else if campaign.Slug != "" {
 			campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s", campaign.Slug)
 			campaign.PID = campaign.Slug
 		}

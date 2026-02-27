@@ -129,15 +129,17 @@ func extractCampaignFromData(data map[string]interface{}) model.Campaign {
 		campaign.Slug = slug
 	}
 
-	// Build project URL
-	if campaign.Slug != "" {
-		campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s", campaign.Slug)
-	} else if urls, ok := data["urls"].(map[string]interface{}); ok {
+	// Build project URL - prefer canonical URL from urls.web.project
+	if urls, ok := data["urls"].(map[string]interface{}); ok {
 		if web, ok := urls["web"].(map[string]interface{}); ok {
 			if project, ok := web["project"].(string); ok {
 				campaign.ProjectURL = project
 			}
 		}
+	}
+	// Fallback to building from slug only if no canonical URL provided
+	if campaign.ProjectURL == "" && campaign.Slug != "" {
+		campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s", campaign.Slug)
 	}
 
 	return campaign

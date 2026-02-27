@@ -17,6 +17,11 @@ func main() {
 
 	cfg := config.Load()
 
+	// Validate required ScrapingBee API key
+	if cfg.ScrapingBeeAPIKey == "" {
+		log.Fatalf("SCRAPINGBEE_API_KEY is required but not set in environment")
+	}
+
 	if cfg.DatabaseURL != "" {
 		if err := db.Init(cfg); err != nil {
 			log.Fatalf("DB init: %v", err)
@@ -30,6 +35,7 @@ func main() {
 		cfg.ScrapingBeeAPIKey,
 		cfg.ScrapingBeeMaxConcurrent,
 	)
+	log.Printf("ScrapingBee service initialized (max concurrent: %d)", cfg.ScrapingBeeMaxConcurrent)
 
 	var cronSvc *service.CronService
 	if db.IsEnabled() {
