@@ -35,19 +35,11 @@ func Init(cfg *config.Config) error {
 	sqlDB.SetMaxOpenConns(20)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	if err := DB.AutoMigrate(
-		&model.Campaign{},
-		&model.CampaignSnapshot{},
-		&model.Category{},
-		&model.Device{},
-		&model.Alert{},
-		&model.AlertMatch{},
-	); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
+	// CRITICAL: Run all column renames BEFORE AutoMigrate
+	// Otherwise GORM creates empty columns with NOT NULL constraints that fail
 
 	// Fix campaigns table: the original column was p_id (GORM snake_case of PID).
-	// After adding gorm:"column:pid", AutoMigrate added a separate pid column.
+	// After adding gorm:"column:pid", AutoMigrate would create a separate pid column.
 	// This migration handles all transition states idempotently.
 	if err := DB.Exec(`
 		DO $$
@@ -123,17 +115,43 @@ func Init(cfg *config.Config) error {
 	if err := DB.Exec(`
 		DO $$
 		BEGIN
-			-- Rename column if it exists with old snake_case name
+			-- Case 1: campaign_p_id exists but campaign_pid does not — simple rename
 			IF EXISTS (
 				SELECT 1 FROM information_schema.columns
 				WHERE table_name = 'campaign_snapshots' AND column_name = 'campaign_p_id'
+			) AND NOT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaign_snapshots' AND column_name = 'campaign_pid'
 			) THEN
 				ALTER TABLE campaign_snapshots RENAME COLUMN campaign_p_id TO campaign_pid;
+
+			-- Case 2: both columns exist — copy data from old to new, drop old column
+			ELSIF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaign_snapshots' AND column_name = 'campaign_p_id'
+			) AND EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaign_snapshots' AND column_name = 'campaign_pid'
+			) THEN
+				UPDATE campaign_snapshots SET campaign_pid = campaign_p_id WHERE campaign_pid IS NULL OR campaign_pid = '';
+				ALTER TABLE campaign_snapshots DROP COLUMN IF EXISTS campaign_p_id;
 			END IF;
 		END
 		$$;
 	`).Error; err != nil {
 		return fmt.Errorf("migrate campaign_snapshots fk: %w", err)
+	}
+
+	// NOW run AutoMigrate after all column renames are complete
+	if err := DB.AutoMigrate(
+		&model.Campaign{},
+		&model.CampaignSnapshot{},
+		&model.Category{},
+		&model.Device{},
+		&model.Alert{},
+		&model.AlertMatch{},
+	); err != nil {
+		return fmt.Errorf("automigrate: %w", err)
 	}
 
 	log.Println("Database connected and migrated")
