@@ -60,9 +60,10 @@ func (rl *RateLimiter) Release() {
 
 func NewScrapingBeeClient(apiKey string, maxConcurrent int) *ScrapingBeeClient {
 	return &ScrapingBeeClient{
-		apiKey:      apiKey,
-		baseURL:     scrapingBeeBaseURL,
-		httpClient:  &http.Client{Timeout: 60 * time.Second},
+		apiKey:  apiKey,
+		baseURL: scrapingBeeBaseURL,
+		// ScrapingBee timeout param is 30s; add 5s margin for network round-trip.
+		httpClient:  &http.Client{Timeout: 35 * time.Second},
 		rateLimiter: NewRateLimiter(maxConcurrent, 500*time.Millisecond),
 	}
 }
@@ -114,29 +115,46 @@ func (c *ScrapingBeeClient) doRequest(ctx context.Context, targetURL string, use
 	}
 	defer c.rateLimiter.Release()
 
-	params := url.Values{}
-	params.Set("api_key", c.apiKey)
-	params.Set("url", targetURL)
-	// Kickstarter discover pages are SSR — no headless browser needed (1 credit vs 5)
-	params.Set("render_js", "false")
-
-	if useAI && aiQuery != "" {
-		params.Set("ai_query", aiQuery)
+	// buildParams constructs the query string, optionally upgrading to premium proxy.
+	buildParams := func(premiumProxy bool) string {
+		params := url.Values{}
+		params.Set("api_key", c.apiKey)
+		params.Set("url", targetURL)
+		// Kickstarter discover pages are SSR — render_js=false costs 1 credit (vs 5).
+		params.Set("render_js", "false")
+		// Fail fast: 30s is more than enough for an SSR page; default is 140s.
+		params.Set("timeout", "30000")
+		// Forward Accept-Language so the request looks like real browser traffic.
+		params.Set("forward_headers", "true")
+		if premiumProxy {
+			// Residential premium proxy (10 credits) as fallback when standard blocked.
+			params.Set("premium_proxy", "true")
+		}
+		if useAI && aiQuery != "" {
+			params.Set("ai_query", aiQuery)
+		}
+		if useAI && aiSelector != "" {
+			params.Set("ai_selector", aiSelector)
+		}
+		if sessionID > 0 {
+			params.Set("session_id", strconv.Itoa(sessionID))
+		}
+		return fmt.Sprintf("%s?%s", c.baseURL, params.Encode())
 	}
-	if useAI && aiSelector != "" {
-		params.Set("ai_selector", aiSelector)
-	}
-	if sessionID > 0 {
-		params.Set("session_id", strconv.Itoa(sessionID))
-	}
-
-	reqURL := fmt.Sprintf("%s?%s", c.baseURL, params.Encode())
 
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	premiumProxy := false
+
+	for attempt := 0; attempt < 4; attempt++ {
 		if attempt > 0 {
 			backoff := time.Duration(attempt) * 2 * time.Second
-			log.Printf("ScrapingBee retry attempt %d after %v", attempt+1, backoff)
+			// On the 3rd retry, escalate to premium_proxy (residential IP).
+			if attempt == 3 && !premiumProxy {
+				premiumProxy = true
+				log.Printf("ScrapingBee escalating to premium_proxy for %s", targetURL)
+			} else {
+				log.Printf("ScrapingBee retry attempt %d after %v", attempt, backoff)
+			}
 			select {
 			case <-time.After(backoff):
 			case <-ctx.Done():
@@ -144,10 +162,13 @@ func (c *ScrapingBeeClient) doRequest(ctx context.Context, targetURL string, use
 			}
 		}
 
+		reqURL := buildParams(premiumProxy)
 		req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 		if err != nil {
 			return "", fmt.Errorf("create request: %w", err)
 		}
+		// Forward a realistic Accept-Language header to Kickstarter.
+		req.Header.Set("Spb-Accept-Language", "en-US,en;q=0.9")
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
@@ -175,10 +196,10 @@ func (c *ScrapingBeeClient) doRequest(ctx context.Context, targetURL string, use
 		}
 
 		credits := resp.Header.Get("Spb-Cost")
-		log.Printf("ScrapingBee success: url=%s, credits=%s, useAI=%v", targetURL, credits, useAI)
+		log.Printf("ScrapingBee success: url=%s, credits=%s, useAI=%v, premium=%v", targetURL, credits, useAI, premiumProxy)
 
 		return string(body), nil
 	}
 
-	return "", fmt.Errorf("failed after 3 attempts: %w", lastErr)
+	return "", fmt.Errorf("failed after 4 attempts: %w", lastErr)
 }
