@@ -16,7 +16,7 @@ var sortMap = map[string]string{
 	"ending":   "END_DATE",
 }
 
-func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc {
+func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sort := c.DefaultQuery("sort", "trending")
 		gqlSort, ok := sortMap[sort]
@@ -30,7 +30,7 @@ func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc 
 			limit = 50
 		}
 
-		result, err := graphClient.Search("", categoryID, gqlSort, cursor, limit)
+		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -48,7 +48,7 @@ func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc 
 	}
 }
 
-func SearchCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc {
+func SearchCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		q := c.Query("q")
 		if q == "" {
@@ -58,7 +58,7 @@ func SearchCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFun
 		categoryID := c.Query("category_id")
 		cursor := c.Query("cursor")
 
-		result, err := graphClient.Search(q, categoryID, "MAGIC", cursor, 20)
+		result, err := client.Search(q, categoryID, "MAGIC", cursor, 20)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -89,7 +89,7 @@ func GetCampaign(c *gin.Context) {
 	c.JSON(http.StatusOK, campaign)
 }
 
-func ListCategories(graphClient *service.KickstarterGraphClient) gin.HandlerFunc {
+func ListCategories(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.IsEnabled() {
 			var cats []model.Category
@@ -99,7 +99,7 @@ func ListCategories(graphClient *service.KickstarterGraphClient) gin.HandlerFunc
 			}
 		}
 
-		cats, err := graphClient.FetchCategories()
+		cats, err := client.FetchCategories()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

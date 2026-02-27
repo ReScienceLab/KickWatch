@@ -16,18 +16,18 @@ var rootCategories = []string{
 }
 
 type CronService struct {
-	db         *gorm.DB
-	restClient *KickstarterRESTClient
-	apnsClient *APNsClient
-	scheduler  *cron.Cron
+	db              *gorm.DB
+	scrapingService *KickstarterScrapingService
+	apnsClient      *APNsClient
+	scheduler       *cron.Cron
 }
 
-func NewCronService(db *gorm.DB, restClient *KickstarterRESTClient, apns *APNsClient) *CronService {
+func NewCronService(db *gorm.DB, scrapingService *KickstarterScrapingService, apns *APNsClient) *CronService {
 	return &CronService{
-		db:         db,
-		restClient: restClient,
-		apnsClient: apns,
-		scheduler:  cron.New(cron.WithLocation(time.UTC)),
+		db:              db,
+		scrapingService: scrapingService,
+		apnsClient:      apns,
+		scheduler:       cron.New(cron.WithLocation(time.UTC)),
 	}
 }
 
@@ -50,9 +50,9 @@ func (s *CronService) runCrawl() error {
 	upserted := 0
 	for _, catID := range rootCategories {
 		for page := 1; page <= 10; page++ {
-			campaigns, err := s.restClient.DiscoverCampaigns(catID, "newest", page)
+			campaigns, err := s.scrapingService.DiscoverCampaigns(catID, "newest", page)
 			if err != nil {
-				log.Printf("Cron: REST error cat=%s page=%d: %v", catID, page, err)
+				log.Printf("Cron: ScrapingBee error cat=%s page=%d: %v", catID, page, err)
 				break
 			}
 			if len(campaigns) == 0 {
