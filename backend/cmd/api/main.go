@@ -26,8 +26,8 @@ func main() {
 		log.Println("DATABASE_URL not set, running without database")
 	}
 
-	graphClient := service.NewKickstarterGraphClient()
-	restClient := service.NewKickstarterRESTClient()
+	graphClient := service.NewKickstarterGraphClient(cfg.ProxyURL)
+	restClient := service.NewKickstarterRESTClient(cfg.ProxyURL)
 
 	var cronSvc *service.CronService
 	if db.IsEnabled() {

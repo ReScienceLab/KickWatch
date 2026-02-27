@@ -112,6 +112,7 @@ jobs:
           echo "apns_team_id_arn=$(get_arn ${SECRET_PREFIX}/apns-team-id)"  >> $GITHUB_OUTPUT
           echo "apns_bundle_id_arn=$(get_arn ${SECRET_PREFIX}/apns-bundle-id)" >> $GITHUB_OUTPUT
           echo "apns_key_arn=$(get_arn ${SECRET_PREFIX}/apns-key)"      >> $GITHUB_OUTPUT
+          echo "webshare_proxy_url_arn=$(get_arn ${SECRET_PREFIX}/webshare-proxy-url)" >> $GITHUB_OUTPUT
 
       - name: Generate ECS task definition
         env:
@@ -141,11 +142,12 @@ jobs:
                   { "name": "APNS_ENV", "value": "${{ env.IS_PROD == 'true' && 'production' || 'sandbox' }}" }
                 ],
                 "secrets": [
-                  { "name": "DATABASE_URL",   "valueFrom": "${{ steps.secrets.outputs.db_arn }}" },
-                  { "name": "APNS_KEY_ID",    "valueFrom": "${{ steps.secrets.outputs.apns_key_id_arn }}" },
-                  { "name": "APNS_TEAM_ID",   "valueFrom": "${{ steps.secrets.outputs.apns_team_id_arn }}" },
-                  { "name": "APNS_BUNDLE_ID", "valueFrom": "${{ steps.secrets.outputs.apns_bundle_id_arn }}" },
-                  { "name": "APNS_KEY",       "valueFrom": "${{ steps.secrets.outputs.apns_key_arn }}" }
+                  { "name": "DATABASE_URL",        "valueFrom": "${{ steps.secrets.outputs.db_arn }}" },
+                  { "name": "APNS_KEY_ID",         "valueFrom": "${{ steps.secrets.outputs.apns_key_id_arn }}" },
+                  { "name": "APNS_TEAM_ID",        "valueFrom": "${{ steps.secrets.outputs.apns_team_id_arn }}" },
+                  { "name": "APNS_BUNDLE_ID",      "valueFrom": "${{ steps.secrets.outputs.apns_bundle_id_arn }}" },
+                  { "name": "APNS_KEY",            "valueFrom": "${{ steps.secrets.outputs.apns_key_arn }}" },
+                  { "name": "WEBSHARE_PROXY_URL",  "valueFrom": "${{ steps.secrets.outputs.webshare_proxy_url_arn }}" }
                 ],
                 "readonlyRootFilesystem": true,
                 "linuxParameters": { "initProcessEnabled": true },

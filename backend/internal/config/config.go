@@ -11,6 +11,7 @@ type Config struct {
 	APNSKeyPath  string
 	APNSKey      string
 	APNSEnv      string
+	ProxyURL     string
 }
 
 func Load() *Config {
@@ -31,5 +32,6 @@ func Load() *Config {
 		APNSKeyPath:  os.Getenv("APNS_KEY_PATH"),
 		APNSKey:      os.Getenv("APNS_KEY"),
 		APNSEnv:      apnsEnv,
+		ProxyURL:     os.Getenv("WEBSHARE_PROXY_URL"),
 	}
 }
