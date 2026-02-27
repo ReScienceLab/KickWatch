@@ -11,10 +11,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-var rootCategories = []string{
-	"1", "3", "4", "5", "6", "7", "9", "10", "11", "12", "13", "14", "15", "16", "17",
-}
-
 type CronService struct {
 	db              *gorm.DB
 	scrapingService *KickstarterScrapingService
@@ -50,11 +46,11 @@ func (s *CronService) RunCrawlNow() error {
 	upserted := 0
 	var allCampaigns []model.Campaign
 
-	for _, catID := range rootCategories {
-		for page := 1; page <= 10; page++ {
-			campaigns, err := s.scrapingService.DiscoverCampaigns(catID, "newest", page)
+	for _, cat := range crawlCategories {
+		for page := 1; page <= cat.PageDepth; page++ {
+			campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, "newest", page)
 			if err != nil {
-				log.Printf("Cron: ScrapingBee error cat=%s page=%d: %v", catID, page, err)
+				log.Printf("Cron: ScrapingBee error cat=%s page=%d: %v", cat.ID, page, err)
 				break
 			}
 			if len(campaigns) == 0 {
