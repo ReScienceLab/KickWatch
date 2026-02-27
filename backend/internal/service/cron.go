@@ -56,41 +56,58 @@ func (s *CronService) syncCategories() {
 	}
 }
 
+// crawlSorts defines the sort strategies used in each nightly crawl pass.
+// "newest" catches new launches; "magic" catches trending; "end_date" catches expiring.
+var crawlSorts = []struct {
+	sort      string
+	pageDepth int // pages per category for this sort pass
+}{
+	{"newest", 10},  // primary: new launches, full depth
+	{"magic", 5},    // trending/recommended
+	{"end_date", 3}, // ending soon
+}
+
 func (s *CronService) RunCrawlNow() error {
 	s.syncCategories()
 
 	upserted := 0
 	var allCampaigns []model.Campaign
 
-	for _, cat := range crawlCategories {
-		for page := 1; page <= cat.PageDepth; page++ {
-			campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, "newest", page)
-			if err != nil {
-				log.Printf("Cron: ScrapingBee error cat=%s page=%d: %v", cat.ID, page, err)
-				break
+	for _, sortCfg := range crawlSorts {
+		for _, cat := range crawlCategories {
+			depth := cat.PageDepth
+			if sortCfg.pageDepth < depth {
+				depth = sortCfg.pageDepth
 			}
-			if len(campaigns) == 0 {
-				break
+			for page := 1; page <= depth; page++ {
+				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page)
+				if err != nil {
+					log.Printf("Cron: ScrapingBee error sort=%s cat=%s page=%d: %v", sortCfg.sort, cat.ID, page, err)
+					break
+				}
+				if len(campaigns) == 0 {
+					break
+				}
+				now := time.Now()
+				for i := range campaigns {
+					campaigns[i].LastUpdatedAt = now
+				}
+				result := s.db.Clauses(clause.OnConflict{
+					Columns: []clause.Column{{Name: "pid"}},
+					DoUpdates: clause.AssignmentColumns([]string{
+						"name", "blurb", "photo_url", "goal_amount", "goal_currency",
+						"pledged_amount", "deadline", "state", "category_id", "category_name",
+						"project_url", "creator_name", "percent_funded", "slug", "last_updated_at",
+					}),
+				}).Create(&campaigns)
+				if result.Error != nil {
+					log.Printf("Cron: upsert error: %v", result.Error)
+				} else {
+					upserted += len(campaigns)
+					allCampaigns = append(allCampaigns, campaigns...)
+				}
+				time.Sleep(500 * time.Millisecond)
 			}
-			now := time.Now()
-			for i := range campaigns {
-				campaigns[i].LastUpdatedAt = now
-			}
-			result := s.db.Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "pid"}},
-				DoUpdates: clause.AssignmentColumns([]string{
-					"name", "blurb", "photo_url", "goal_amount", "goal_currency",
-					"pledged_amount", "deadline", "state", "category_id", "category_name",
-					"project_url", "creator_name", "percent_funded", "slug", "last_updated_at",
-				}),
-			}).Create(&campaigns)
-			if result.Error != nil {
-				log.Printf("Cron: upsert error: %v", result.Error)
-			} else {
-				upserted += len(campaigns)
-				allCampaigns = append(allCampaigns, campaigns...)
-			}
-			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	log.Printf("Cron: crawl done, upserted %d campaigns", upserted)
