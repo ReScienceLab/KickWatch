@@ -92,6 +92,7 @@ func (s *CronService) RunCrawlNow() error {
 	s.syncCategories()
 
 	upserted := 0
+	seenPIDs := make(map[string]struct{})
 	var allCampaigns []model.Campaign
 
 	for _, sortCfg := range buildCrawlSorts() {
@@ -124,6 +125,9 @@ func (s *CronService) RunCrawlNow() error {
 					log.Printf("Cron: upsert error: %v", result.Error)
 				} else {
 					upserted += len(campaigns)
+					for _, c := range campaigns {
+						seenPIDs[c.PID] = struct{}{}
+					}
 					allCampaigns = append(allCampaigns, campaigns...)
 				}
 				time.Sleep(500 * time.Millisecond)
@@ -131,6 +135,16 @@ func (s *CronService) RunCrawlNow() error {
 		}
 	}
 	log.Printf("Cron: crawl done, upserted %d campaigns", upserted)
+
+	// Sanity check: a full crawl across all categories should always yield
+	// at least some campaigns. Zero almost certainly means a parse failure
+	// (e.g. Kickstarter changed their HTML structure), not a genuinely empty site.
+	const minExpectedCampaigns = 50
+	if len(seenPIDs) < minExpectedCampaigns {
+		log.Printf("ERROR: crawl sanity check FAILED — only %d distinct campaigns seen (expected >=%d). "+
+			"Possible HTML structure change or ScrapingBee degradation. "+
+			"Check kickstarter_parser.go [data-project] selector.", len(seenPIDs), minExpectedCampaigns)
+	}
 
 	if len(allCampaigns) > 0 {
 		s.storeSnapshots(allCampaigns)
