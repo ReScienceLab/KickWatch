@@ -118,7 +118,8 @@ func (s *CronService) RunCrawlNow() error {
 					DoUpdates: clause.AssignmentColumns([]string{
 						"name", "blurb", "photo_url", "goal_amount", "goal_currency",
 						"pledged_amount", "deadline", "state", "category_id", "category_name",
-						"project_url", "creator_name", "percent_funded", "slug", "last_updated_at",
+						"project_url", "creator_name", "percent_funded", "backers_count",
+						"slug", "last_updated_at",
 					}),
 				}).Create(&campaigns)
 				if result.Error != nil {

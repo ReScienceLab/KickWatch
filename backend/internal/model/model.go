@@ -22,6 +22,7 @@ type Campaign struct {
 	ProjectURL    string    `json:"project_url"`
 	CreatorName   string    `json:"creator_name"`
 	PercentFunded float64   `json:"percent_funded"`
+	BackersCount  int       `gorm:"default:0" json:"backers_count"`
 	Slug          string    `json:"slug"`
 	Velocity24h   float64   `gorm:"default:0" json:"velocity_24h"`
 	PleDelta24h   float64   `gorm:"default:0" json:"pledge_delta_24h"`
