@@ -3,6 +3,8 @@ package service
 import (
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/kickwatch/backend/internal/model"
@@ -10,6 +12,16 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// envInt reads an integer from an env var, returning defaultVal if unset or invalid.
+func envInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultVal
+}
 
 type CronService struct {
 	db              *gorm.DB
@@ -57,14 +69,23 @@ func (s *CronService) syncCategories() {
 }
 
 // crawlSorts defines the sort strategies used in each nightly crawl pass.
-// "newest" catches new launches; "magic" catches trending; "end_date" catches expiring.
-var crawlSorts = []struct {
+// Default page depths can be overridden at runtime via env vars:
+//
+//	CRAWL_DEPTH_NEWEST  (default 10)
+//	CRAWL_DEPTH_MAGIC   (default 5)
+//	CRAWL_DEPTH_ENDDATE (default 3)
+func buildCrawlSorts() []struct {
 	sort      string
-	pageDepth int // pages per category for this sort pass
-}{
-	{"newest", 10},  // primary: new launches, full depth
-	{"magic", 5},    // trending/recommended
-	{"end_date", 3}, // ending soon
+	pageDepth int
+} {
+	return []struct {
+		sort      string
+		pageDepth int
+	}{
+		{"newest", envInt("CRAWL_DEPTH_NEWEST", 10)},
+		{"magic", envInt("CRAWL_DEPTH_MAGIC", 5)},
+		{"end_date", envInt("CRAWL_DEPTH_ENDDATE", 3)},
+	}
 }
 
 func (s *CronService) RunCrawlNow() error {
@@ -73,7 +94,7 @@ func (s *CronService) RunCrawlNow() error {
 	upserted := 0
 	var allCampaigns []model.Campaign
 
-	for _, sortCfg := range crawlSorts {
+	for _, sortCfg := range buildCrawlSorts() {
 		for _, cat := range crawlCategories {
 			depth := cat.PageDepth
 			if sortCfg.pageDepth < depth {
