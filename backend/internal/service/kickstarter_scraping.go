@@ -25,7 +25,9 @@ func NewKickstarterScrapingService(apiKey string, maxConcurrent int) *Kickstarte
 	}
 }
 
-// Search searches for campaigns using AI extraction (6 credits per request).
+// Search searches for campaigns using HTML parsing (1 credit per request).
+// Note: AI extraction was removed — Kickstarter embeds project data in [data-project]
+// HTML attributes, not text nodes, so ScrapingBee AI returns EMPTY_RESPONSE for that selector.
 func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor string, first int) (*SearchResult, error) {
 	ctx := context.Background()
 
@@ -37,39 +39,8 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 		}
 	}
 
-	// Build Kickstarter discover URL with page
 	discoverURL := s.buildDiscoverURL(term, categoryID, sort, page)
 
-	// Try AI extraction first; ai_selector focuses only on project cards, reducing processing time.
-	aiQuery := "Extract all projects from this page. For each project return a JSON object with these fields: name, slug, creator_slug (the creator's URL slug, e.g. 'john-doe' from kickstarter.com/projects/john-doe/...), project_url (full canonical Kickstarter URL), goal, pledged, currency, deadline, creator, category, photo_url, blurb."
-	aiSelector := "[data-project]"
-
-	aiResult, err := s.client.ExtractWithAI(ctx, discoverURL, aiQuery, aiSelector)
-	if err == nil {
-		campaigns, parseErr := s.parseAIResponse(aiResult)
-		if parseErr == nil && len(campaigns) > 0 {
-			log.Printf("AI extraction successful: found %d campaigns (page %d)", len(campaigns), page)
-
-			// Generate next cursor if we got a full page
-			nextCursor := ""
-			hasNextPage := len(campaigns) >= first
-			if hasNextPage {
-				nextCursor = fmt.Sprintf("page:%d", page+1)
-			}
-
-			return &SearchResult{
-				Campaigns:   campaigns,
-				TotalCount:  len(campaigns),
-				NextCursor:  nextCursor,
-				HasNextPage: hasNextPage,
-			}, nil
-		}
-		log.Printf("AI extraction parse failed: %v, falling back to HTML", parseErr)
-	} else {
-		log.Printf("AI extraction failed: %v, falling back to HTML", err)
-	}
-
-	// Fallback to HTML parsing
 	html, err := s.client.FetchHTMLInSession(ctx, discoverURL, 0)
 	if err != nil {
 		return nil, fmt.Errorf("fetch HTML: %w", err)
@@ -80,9 +51,8 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
-	log.Printf("HTML parsing successful: found %d campaigns (page %d)", len(campaigns), page)
+	log.Printf("Search: found %d campaigns for term=%q page=%d", len(campaigns), term, page)
 
-	// Generate next cursor if we got a full page
 	nextCursor := ""
 	hasNextPage := len(campaigns) >= first
 	if hasNextPage {
