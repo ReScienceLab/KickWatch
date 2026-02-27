@@ -155,6 +155,58 @@ func (s *CronService) RunCrawlNow() error {
 	return s.matchAlerts()
 }
 
+// RunBackfill performs a deep one-time crawl to seed campaigns that pre-date
+// the system launch. It uses all sort strategies at configurable depth
+// (BACKFILL_DEPTH_NEWEST, BACKFILL_DEPTH_MAGIC, BACKFILL_DEPTH_ENDDATE; defaults 25/15/10).
+func (s *CronService) RunBackfill() error {
+	sorts := []struct {
+		sort  string
+		depth int
+	}{
+		{"newest", envInt("BACKFILL_DEPTH_NEWEST", 25)},
+		{"magic", envInt("BACKFILL_DEPTH_MAGIC", 15)},
+		{"end_date", envInt("BACKFILL_DEPTH_ENDDATE", 10)},
+	}
+
+	upserted := 0
+	for _, sortCfg := range sorts {
+		for _, cat := range crawlCategories {
+			depth := sortCfg.depth
+			for page := 1; page <= depth; page++ {
+				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page)
+				if err != nil {
+					log.Printf("Backfill: error sort=%s cat=%s page=%d: %v", sortCfg.sort, cat.ID, page, err)
+					break
+				}
+				if len(campaigns) == 0 {
+					break
+				}
+				now := time.Now()
+				for i := range campaigns {
+					campaigns[i].LastUpdatedAt = now
+				}
+				result := s.db.Clauses(clause.OnConflict{
+					Columns: []clause.Column{{Name: "pid"}},
+					DoUpdates: clause.AssignmentColumns([]string{
+						"name", "blurb", "photo_url", "goal_amount", "goal_currency",
+						"pledged_amount", "deadline", "state", "category_id", "category_name",
+						"project_url", "creator_name", "percent_funded", "backers_count",
+						"slug", "last_updated_at",
+					}),
+				}).Create(&campaigns)
+				if result.Error != nil {
+					log.Printf("Backfill: upsert error: %v", result.Error)
+				} else {
+					upserted += len(campaigns)
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+	}
+	log.Printf("Backfill: done, upserted %d campaigns", upserted)
+	return nil
+}
+
 func (s *CronService) storeSnapshots(campaigns []model.Campaign) {
 	snapshots := make([]model.CampaignSnapshot, 0, len(campaigns))
 	now := time.Now()
