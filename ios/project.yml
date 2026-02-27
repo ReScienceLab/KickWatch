@@ -32,5 +32,5 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.rescience.kickwatch
         INFOPLIST_FILE: KickWatch/Info.plist
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 7Q28CBP3S5
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
