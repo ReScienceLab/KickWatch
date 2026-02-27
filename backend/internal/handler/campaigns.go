@@ -16,7 +16,7 @@ var sortMap = map[string]string{
 	"ending":   "END_DATE",
 }
 
-func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc {
+func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sort := c.DefaultQuery("sort", "trending")
 		categoryID := c.Query("category_id")
@@ -44,7 +44,7 @@ func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc 
 			gqlSort = "MAGIC"
 		}
 
-		result, err := graphClient.Search("", categoryID, gqlSort, cursor, limit)
+		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
 		if err != nil {
 			// fallback to DB if GraphQL fails
 			if db.IsEnabled() {
@@ -62,7 +62,7 @@ func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc 
 			return
 		}
 
-		nextCursor := ""
+		var nextCursor interface{}
 		if result.HasNextPage {
 			nextCursor = result.NextCursor
 		}
@@ -74,7 +74,7 @@ func ListCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc 
 	}
 }
 
-func SearchCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFunc {
+func SearchCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		q := c.Query("q")
 		if q == "" {
@@ -84,13 +84,13 @@ func SearchCampaigns(graphClient *service.KickstarterGraphClient) gin.HandlerFun
 		categoryID := c.Query("category_id")
 		cursor := c.Query("cursor")
 
-		result, err := graphClient.Search(q, categoryID, "MAGIC", cursor, 20)
+		result, err := client.Search(q, categoryID, "MAGIC", cursor, 20)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		nextCursor := ""
+		var nextCursor interface{}
 		if result.HasNextPage {
 			nextCursor = result.NextCursor
 		}
@@ -115,7 +115,7 @@ func GetCampaign(c *gin.Context) {
 	c.JSON(http.StatusOK, campaign)
 }
 
-func ListCategories(graphClient *service.KickstarterGraphClient) gin.HandlerFunc {
+func ListCategories(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.IsEnabled() {
 			var cats []model.Category
@@ -125,7 +125,7 @@ func ListCategories(graphClient *service.KickstarterGraphClient) gin.HandlerFunc
 			}
 		}
 
-		cats, err := graphClient.FetchCategories()
+		cats, err := client.FetchCategories()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

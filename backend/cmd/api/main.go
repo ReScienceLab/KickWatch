@@ -18,6 +18,11 @@ func main() {
 
 	cfg := config.Load()
 
+	// Validate required ScrapingBee API key
+	if cfg.ScrapingBeeAPIKey == "" {
+		log.Fatalf("SCRAPINGBEE_API_KEY is required but not set in environment")
+	}
+
 	if cfg.DatabaseURL != "" {
 		if err := db.Init(cfg); err != nil {
 			log.Fatalf("DB init: %v", err)
@@ -26,8 +31,12 @@ func main() {
 		log.Println("DATABASE_URL not set, running without database")
 	}
 
-	graphClient := service.NewKickstarterGraphClient(cfg.ProxyURL)
-	restClient := service.NewKickstarterRESTClient(cfg.ProxyURL)
+	// Initialize ScrapingBee service
+	scrapingService := service.NewKickstarterScrapingService(
+		cfg.ScrapingBeeAPIKey,
+		cfg.ScrapingBeeMaxConcurrent,
+	)
+	log.Printf("ScrapingBee service initialized (max concurrent: %d)", cfg.ScrapingBeeMaxConcurrent)
 
 	var cronSvc *service.CronService
 	if db.IsEnabled() {
@@ -39,7 +48,7 @@ func main() {
 				log.Printf("APNs init failed (push disabled): %v", err)
 			}
 		}
-		cronSvc = service.NewCronService(db.DB, restClient, apnsClient)
+		cronSvc = service.NewCronService(db.DB, scrapingService, apnsClient)
 		cronSvc.Start()
 		defer cronSvc.Stop()
 
@@ -60,10 +69,10 @@ func main() {
 	{
 		api.GET("/health", handler.Health)
 
-		api.GET("/campaigns", handler.ListCampaigns(graphClient))
-		api.GET("/campaigns/search", handler.SearchCampaigns(graphClient))
+		api.GET("/campaigns", handler.ListCampaigns(scrapingService))
+		api.GET("/campaigns/search", handler.SearchCampaigns(scrapingService))
 		api.GET("/campaigns/:pid", handler.GetCampaign)
-		api.GET("/categories", handler.ListCategories(graphClient))
+		api.GET("/categories", handler.ListCategories(scrapingService))
 
 		api.POST("/devices/register", handler.RegisterDevice)
 
