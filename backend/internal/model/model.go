@@ -8,7 +8,7 @@ import (
 )
 
 type Campaign struct {
-	PID           string    `gorm:"primaryKey" json:"pid"`
+	PID           string    `gorm:"column:pid;primaryKey" json:"pid"`
 	Name          string    `gorm:"not null" json:"name"`
 	Blurb         string    `json:"blurb"`
 	PhotoURL      string    `json:"photo_url"`
