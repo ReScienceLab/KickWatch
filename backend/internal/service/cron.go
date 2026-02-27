@@ -96,10 +96,9 @@ func (s *CronService) RunCrawlNow() error {
 
 	for _, sortCfg := range buildCrawlSorts() {
 		for _, cat := range crawlCategories {
-			depth := cat.PageDepth
-			if sortCfg.pageDepth < depth {
-				depth = sortCfg.pageDepth
-			}
+			// sortCfg.pageDepth is env-configurable (can raise or lower).
+			// cat.PageDepth is only the default used when no env var is set.
+			depth := sortCfg.pageDepth
 			for page := 1; page <= depth; page++ {
 				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page)
 				if err != nil {
