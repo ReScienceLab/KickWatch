@@ -37,3 +37,6 @@ Configs/Secrets.swift
 
 # Git worktrees
 .worktrees/
+
+# skills
+.skill-archive/
