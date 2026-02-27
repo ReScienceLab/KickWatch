@@ -46,15 +46,46 @@ func Init(cfg *config.Config) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
-	// Ensure campaigns.pid has a primary key constraint (AutoMigrate does not
-	// add PKs to pre-existing tables; this DO block is idempotent).
+	// Fix campaigns table: the original column was p_id (GORM snake_case of PID).
+	// After adding gorm:"column:pid", AutoMigrate added a separate pid column.
+	// This migration handles all transition states idempotently.
 	if err := DB.Exec(`
 		DO $$
 		BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM information_schema.table_constraints
-				WHERE table_name = 'campaigns' AND constraint_type = 'PRIMARY KEY'
+			-- Case 1: p_id exists but pid does not — simple rename
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaigns' AND column_name = 'p_id'
+			) AND NOT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaigns' AND column_name = 'pid'
 			) THEN
+				ALTER TABLE campaigns RENAME COLUMN p_id TO pid;
+
+			-- Case 2: both columns exist — copy data across, drop old column
+			ELSIF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaigns' AND column_name = 'p_id'
+			) AND EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaigns' AND column_name = 'pid'
+			) THEN
+				UPDATE campaigns SET pid = p_id WHERE pid IS NULL OR pid = '';
+				ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_pkey;
+				ALTER TABLE campaigns DROP COLUMN IF EXISTS p_id;
+			END IF;
+
+			-- Ensure pid is the primary key (check column specifically, not just any PK)
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints tc
+				JOIN information_schema.key_column_usage kcu
+					ON tc.constraint_name = kcu.constraint_name
+					AND tc.table_schema = kcu.table_schema
+				WHERE tc.table_name = 'campaigns'
+					AND tc.constraint_type = 'PRIMARY KEY'
+					AND kcu.column_name = 'pid'
+			) THEN
+				ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_pkey;
 				ALTER TABLE campaigns ADD PRIMARY KEY (pid);
 			END IF;
 		END
