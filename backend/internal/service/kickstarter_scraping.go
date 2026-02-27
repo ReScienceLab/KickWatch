@@ -197,6 +197,7 @@ func (s *KickstarterScrapingService) parseAIResponse(jsonData string) ([]model.C
 			CategoryName:  p.Category,
 			PhotoURL:      p.PhotoURL,
 			Blurb:         p.Blurb,
+			BackersCount:  p.BackersCount,
 		}
 
 		// Parse deadline
