@@ -1,0 +1,194 @@
+name: Deploy Backend to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      IS_PROD: ${{ github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Set environment variables
+        run: |
+          if [ "${{ env.IS_PROD }}" = "true" ]; then
+            echo "ECR_REPOSITORY=kickwatch-api"            >> $GITHUB_ENV
+            echo "ECS_CLUSTER=kickwatch-cluster"          >> $GITHUB_ENV
+            echo "ECS_SERVICE=kickwatch-api-service"      >> $GITHUB_ENV
+            echo "CONTAINER_NAME=kickwatch-api"           >> $GITHUB_ENV
+            echo "DEPLOY_ENV=production"                  >> $GITHUB_ENV
+            echo "SECRET_PREFIX=kickwatch"                >> $GITHUB_ENV
+            echo "LOG_GROUP=/ecs/kickwatch-api"           >> $GITHUB_ENV
+            echo "GIN_MODE=release"                       >> $GITHUB_ENV
+          else
+            echo "ECR_REPOSITORY=kickwatch-api-dev"       >> $GITHUB_ENV
+            echo "ECS_CLUSTER=kickwatch-cluster-dev"      >> $GITHUB_ENV
+            echo "ECS_SERVICE=kickwatch-api-dev-service"  >> $GITHUB_ENV
+            echo "CONTAINER_NAME=kickwatch-api-dev"       >> $GITHUB_ENV
+            echo "DEPLOY_ENV=development"                 >> $GITHUB_ENV
+            echo "SECRET_PREFIX=kickwatch-dev"            >> $GITHUB_ENV
+            echo "LOG_GROUP=/ecs/kickwatch-api-dev"       >> $GITHUB_ENV
+            echo "GIN_MODE=debug"                         >> $GITHUB_ENV
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run tests and vet
+        working-directory: backend
+        run: |
+          go vet ./... &
+          VET_PID=$!
+          go test ./... &
+          TEST_PID=$!
+          wait $VET_PID || exit 1
+          wait $TEST_PID || exit 1
+
+      - name: Build Go binary
+        working-directory: backend
+        run: CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null || \
+          aws ecr create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION \
+            --image-scanning-configuration scanOnPush=true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        id: build-image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.ci
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Resolve Secrets Manager ARNs
+        id: secrets
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          get_arn() { aws secretsmanager describe-secret --secret-id "$1" --region $AWS_REGION --query "ARN" --output text; }
+          echo "db_arn=$(get_arn ${SECRET_PREFIX}/database-url)"       >> $GITHUB_OUTPUT
+          echo "apns_key_id_arn=$(get_arn ${SECRET_PREFIX}/apns-key-id)"    >> $GITHUB_OUTPUT
+          echo "apns_team_id_arn=$(get_arn ${SECRET_PREFIX}/apns-team-id)"  >> $GITHUB_OUTPUT
+          echo "apns_bundle_id_arn=$(get_arn ${SECRET_PREFIX}/apns-bundle-id)" >> $GITHUB_OUTPUT
+          echo "apns_key_arn=$(get_arn ${SECRET_PREFIX}/apns-key)"      >> $GITHUB_OUTPUT
+
+      - name: Generate ECS task definition
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          cat > /tmp/task-definition.json <<EOF
+          {
+            "family": "${{ env.CONTAINER_NAME }}",
+            "networkMode": "awsvpc",
+            "requiresCompatibilities": ["FARGATE"],
+            "cpu": "256",
+            "memory": "512",
+            "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+            "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/kickwatch-task-role",
+            "containerDefinitions": [
+              {
+                "name": "${{ env.CONTAINER_NAME }}",
+                "image": "placeholder",
+                "essential": true,
+                "portMappings": [
+                  { "containerPort": 8080, "protocol": "tcp" }
+                ],
+                "environment": [
+                  { "name": "PORT",         "value": "8080" },
+                  { "name": "GIN_MODE",     "value": "${{ env.GIN_MODE }}" },
+                  { "name": "APP_ENV",      "value": "${{ env.DEPLOY_ENV }}" },
+                  { "name": "APNS_ENV", "value": "${{ env.IS_PROD == 'true' && 'production' || 'sandbox' }}" }
+                ],
+                "secrets": [
+                  { "name": "DATABASE_URL",   "valueFrom": "${{ steps.secrets.outputs.db_arn }}" },
+                  { "name": "APNS_KEY_ID",    "valueFrom": "${{ steps.secrets.outputs.apns_key_id_arn }}" },
+                  { "name": "APNS_TEAM_ID",   "valueFrom": "${{ steps.secrets.outputs.apns_team_id_arn }}" },
+                  { "name": "APNS_BUNDLE_ID", "valueFrom": "${{ steps.secrets.outputs.apns_bundle_id_arn }}" },
+                  { "name": "APNS_KEY",       "valueFrom": "${{ steps.secrets.outputs.apns_key_arn }}" }
+                ],
+                "readonlyRootFilesystem": true,
+                "linuxParameters": { "initProcessEnabled": true },
+                "healthCheck": {
+                  "command": ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/api/health || exit 1"],
+                  "interval": 15,
+                  "timeout": 5,
+                  "retries": 3,
+                  "startPeriod": 10
+                },
+                "logConfiguration": {
+                  "logDriver": "awslogs",
+                  "options": {
+                    "awslogs-group": "${{ env.LOG_GROUP }}",
+                    "awslogs-region": "${{ env.AWS_REGION }}",
+                    "awslogs-stream-prefix": "ecs"
+                  }
+                }
+              }
+            ]
+          }
+          EOF
+
+      - name: Fill image into task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ env.DEPLOY_ENV }}"   >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster**: ${{ env.ECS_CLUSTER }}"      >> $GITHUB_STEP_SUMMARY
+          echo "- **Service**: ${{ env.ECS_SERVICE }}"      >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ github.sha }}"             >> $GITHUB_STEP_SUMMARY

@@ -23,8 +23,9 @@ vendor/
 
 # Environment
 .env
-.env.*
-*.env
+.env.local
+.env.production
+!.env.example
 
 # Secrets
 Configs/Secrets.swift

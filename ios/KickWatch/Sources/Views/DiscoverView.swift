@@ -1,0 +1,86 @@
+import SwiftUI
+import SwiftData
+
+struct DiscoverView: View {
+    @State private var vm = DiscoverViewModel()
+    @State private var searchText = ""
+    @State private var showSearch = false
+
+    private let sortOptions = [("trending", "Trending"), ("newest", "New"), ("ending", "Ending Soon")]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                sortPicker
+                categoryScroll
+                campaignList
+            }
+            .navigationTitle("Discover")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSearch = true } label: { Image(systemName: "magnifyingglass") }
+                }
+            }
+            .sheet(isPresented: $showSearch) { SearchView() }
+            .task { await vm.loadCategories(); await vm.load() }
+            .refreshable { await vm.load() }
+        }
+    }
+
+    private var sortPicker: some View {
+        Picker("Sort", selection: Binding(
+            get: { vm.selectedSort },
+            set: { Task { await vm.selectSort($0) } }
+        )) {
+            ForEach(sortOptions, id: \.0) { Text($1).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    private var categoryScroll: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                CategoryChip(title: "All", isSelected: vm.selectedCategoryID == nil) {
+                    Task { await vm.selectCategory(nil) }
+                }
+                ForEach(vm.categories.filter { $0.parent_id == nil }, id: \.id) { cat in
+                    CategoryChip(title: cat.name, isSelected: vm.selectedCategoryID == cat.id) {
+                        Task { await vm.selectCategory(cat.id) }
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private var campaignList: some View {
+        Group {
+            if vm.isLoading && vm.campaigns.isEmpty {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let err = vm.error {
+                Text(err).foregroundStyle(.secondary).padding()
+            } else {
+                List {
+                    ForEach(vm.campaigns, id: \.pid) { campaign in
+                        NavigationLink(destination: CampaignDetailView(campaign: campaign)) {
+                            CampaignRowView(campaign: campaign)
+                        }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+                        .onAppear {
+                            if campaign.pid == vm.campaigns.last?.pid {
+                                Task { await vm.loadMore() }
+                            }
+                        }
+                    }
+                    if vm.isLoadingMore {
+                        ProgressView().frame(maxWidth: .infinity)
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+    }
+}
