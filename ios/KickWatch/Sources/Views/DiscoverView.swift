@@ -30,9 +30,9 @@ struct DiscoverView: View {
     private var sortPicker: some View {
         Picker("Sort", selection: Binding(
             get: { vm.selectedSort },
-            set: { Task { await vm.selectSort($0) } }
+            set: { newSort in Task { await vm.selectSort(newSort) } }
         )) {
-            ForEach(sortOptions, id: \.0) { Text($1).tag($0) }
+            ForEach(sortOptions, id: \.0) { key, label in Text(label).tag(key) }
         }
         .pickerStyle(.segmented)
         .padding(.horizontal)
