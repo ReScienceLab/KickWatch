@@ -106,12 +106,16 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          get_arn() { aws secretsmanager describe-secret --secret-id "$1" --region $AWS_REGION --query "ARN" --output text; }
-          echo "db_arn=$(get_arn ${SECRET_PREFIX}/database-url)"       >> $GITHUB_OUTPUT
-          echo "apns_key_id_arn=$(get_arn ${SECRET_PREFIX}/apns-key-id)"    >> $GITHUB_OUTPUT
-          echo "apns_team_id_arn=$(get_arn ${SECRET_PREFIX}/apns-team-id)"  >> $GITHUB_OUTPUT
-          echo "apns_bundle_id_arn=$(get_arn ${SECRET_PREFIX}/apns-bundle-id)" >> $GITHUB_OUTPUT
-          echo "apns_key_arn=$(get_arn ${SECRET_PREFIX}/apns-key)"      >> $GITHUB_OUTPUT
+          get_arn() {
+            local arn
+            arn=$(aws secretsmanager describe-secret --secret-id "$1" --region $AWS_REGION --query "ARN" --output text 2>&1) || { echo "ERROR: secret '$1' not found in Secrets Manager: $arn" >&2; exit 1; }
+            echo "$arn"
+          }
+          echo "db_arn=$(get_arn ${SECRET_PREFIX}/database-url)"                         >> $GITHUB_OUTPUT
+          echo "apns_key_id_arn=$(get_arn ${SECRET_PREFIX}/apns-key-id)"                >> $GITHUB_OUTPUT
+          echo "apns_team_id_arn=$(get_arn ${SECRET_PREFIX}/apns-team-id)"              >> $GITHUB_OUTPUT
+          echo "apns_bundle_id_arn=$(get_arn ${SECRET_PREFIX}/apns-bundle-id)"          >> $GITHUB_OUTPUT
+          echo "apns_key_arn=$(get_arn ${SECRET_PREFIX}/apns-key)"                      >> $GITHUB_OUTPUT
           echo "scrapingbee_api_key_arn=$(get_arn ${SECRET_PREFIX}/scrapingbee-api-key)" >> $GITHUB_OUTPUT
 
       - name: Generate ECS task definition
