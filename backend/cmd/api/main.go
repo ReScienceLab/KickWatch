@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -50,6 +51,14 @@ func main() {
 		cronSvc = service.NewCronService(db.DB, scrapingService, apnsClient)
 		cronSvc.Start()
 		defer cronSvc.Stop()
+
+		go func() {
+			time.Sleep(3 * time.Second)
+			log.Println("Startup: triggering initial crawl")
+			if err := cronSvc.RunCrawlNow(); err != nil {
+				log.Printf("Startup crawl error: %v", err)
+			}
+		}()
 	}
 
 	r := gin.Default()

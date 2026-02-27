@@ -11,16 +11,31 @@ import (
 )
 
 type createAlertRequest struct {
-	DeviceID   string  `json:"device_id" binding:"required"`
-	Keyword    string  `json:"keyword" binding:"required"`
-	CategoryID string  `json:"category_id"`
-	MinPercent float64 `json:"min_percent"`
+	DeviceID       string  `json:"device_id" binding:"required"`
+	AlertType      string  `json:"alert_type"`
+	Keyword        string  `json:"keyword"`
+	CategoryID     string  `json:"category_id"`
+	MinPercent     float64 `json:"min_percent"`
+	VelocityThresh float64 `json:"velocity_thresh"`
 }
 
 func CreateAlert(c *gin.Context) {
 	var req createAlertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	alertType := req.AlertType
+	if alertType == "" {
+		alertType = "keyword"
+	}
+	if alertType == "keyword" && req.Keyword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "keyword is required for keyword alerts"})
+		return
+	}
+	if alertType == "momentum" && req.VelocityThresh <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "velocity_thresh must be > 0 for momentum alerts"})
 		return
 	}
 
@@ -31,11 +46,13 @@ func CreateAlert(c *gin.Context) {
 	}
 
 	alert := model.Alert{
-		DeviceID:   deviceID,
-		Keyword:    req.Keyword,
-		CategoryID: req.CategoryID,
-		MinPercent: req.MinPercent,
-		IsEnabled:  true,
+		DeviceID:       deviceID,
+		AlertType:      alertType,
+		Keyword:        req.Keyword,
+		CategoryID:     req.CategoryID,
+		MinPercent:     req.MinPercent,
+		VelocityThresh: req.VelocityThresh,
+		IsEnabled:      true,
 	}
 	if err := db.DB.Create(&alert).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

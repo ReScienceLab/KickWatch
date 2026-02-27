@@ -14,9 +14,8 @@ type Config struct {
 	APNSKeyPath  string
 	APNSKey      string
 	APNSEnv      string
-
 	// ScrapingBee configuration
-	ScrapingBeeAPIKey      string
+	ScrapingBeeAPIKey        string
 	ScrapingBeeMaxConcurrent int
 }
 
@@ -38,15 +37,14 @@ func Load() *Config {
 	}
 
 	return &Config{
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		Port:         port,
-		APNSKeyID:    os.Getenv("APNS_KEY_ID"),
-		APNSTeamID:   os.Getenv("APNS_TEAM_ID"),
-		APNSBundleID: os.Getenv("APNS_BUNDLE_ID"),
-		APNSKeyPath:  os.Getenv("APNS_KEY_PATH"),
-		APNSKey:      os.Getenv("APNS_KEY"),
-		APNSEnv:      apnsEnv,
-
+		DatabaseURL:              os.Getenv("DATABASE_URL"),
+		Port:                     port,
+		APNSKeyID:                os.Getenv("APNS_KEY_ID"),
+		APNSTeamID:               os.Getenv("APNS_TEAM_ID"),
+		APNSBundleID:             os.Getenv("APNS_BUNDLE_ID"),
+		APNSKeyPath:              os.Getenv("APNS_KEY_PATH"),
+		APNSKey:                  os.Getenv("APNS_KEY"),
+		APNSEnv:                  apnsEnv,
 		ScrapingBeeAPIKey:        os.Getenv("SCRAPINGBEE_API_KEY"),
 		ScrapingBeeMaxConcurrent: maxConcurrent,
 	}

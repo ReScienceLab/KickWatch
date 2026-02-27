@@ -64,12 +64,17 @@ struct AlertRowView: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("\"\(alert.keyword)\"").font(.subheadline).fontWeight(.semibold)
-                Group {
-                    if let cat = alert.category_id { Text("Category: \(cat)") }
-                    if alert.min_percent > 0 { Text("Min \(Int(alert.min_percent))% funded") }
+                if alert.alert_type == "momentum" {
+                    Text("🔥 Momentum Alert").font(.subheadline).fontWeight(.semibold)
+                    Text("+\(Int(alert.velocity_thresh ?? 0))% in 24h").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("\"\(alert.keyword)\"").font(.subheadline).fontWeight(.semibold)
+                    Group {
+                        if let cat = alert.category_id { Text("Category: \(cat)") }
+                        if alert.min_percent > 0 { Text("Min \(Int(alert.min_percent))% funded") }
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 }
-                .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Toggle("", isOn: Binding(
@@ -84,21 +89,44 @@ struct AlertRowView: View {
 
 struct NewAlertSheet: View {
     let vm: AlertsViewModel
+    @State private var alertType = "keyword"
     @State private var keyword = ""
     @State private var minPercent = 0.0
+    @State private var velocityThresh = 50.0
     @Environment(\.dismiss) private var dismiss
+
+    private var isValid: Bool {
+        guard let deviceID = NotificationService.shared.deviceID, !deviceID.isEmpty else { return false }
+        return alertType == "momentum" ? true : !keyword.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Keyword") {
-                    TextField("e.g. mechanical keyboard", text: $keyword)
-                }
-                Section("Min % Funded") {
-                    Slider(value: $minPercent, in: 0...100, step: 10) {
-                        Text("\(Int(minPercent))%")
+                Section("Alert Type") {
+                    Picker("Type", selection: $alertType) {
+                        Text("Keyword").tag("keyword")
+                        Text("🔥 Momentum").tag("momentum")
                     }
-                    Text("\(Int(minPercent))% minimum").foregroundStyle(.secondary)
+                    .pickerStyle(.segmented)
+                }
+
+                if alertType == "keyword" {
+                    Section("Keyword") {
+                        TextField("e.g. mechanical keyboard", text: $keyword)
+                    }
+                    Section("Min % Funded") {
+                        Slider(value: $minPercent, in: 0...100, step: 10)
+                        Text("\(Int(minPercent))% minimum").foregroundStyle(.secondary)
+                    }
+                } else {
+                    Section {
+                        Slider(value: $velocityThresh, in: 25...500, step: 25)
+                        Text("Alert when a campaign grows +\(Int(velocityThresh))% in 24h")
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        Text("Growth Threshold")
+                    }
                 }
             }
             .navigationTitle("New Alert")
@@ -107,13 +135,20 @@ struct NewAlertSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        guard !keyword.isEmpty, let deviceID = NotificationService.shared.deviceID else { return }
+                        guard let deviceID = NotificationService.shared.deviceID else { return }
                         Task {
-                            await vm.createAlert(deviceID: deviceID, keyword: keyword, categoryID: nil, minPercent: minPercent)
+                            await vm.createAlert(
+                                deviceID: deviceID,
+                                alertType: alertType,
+                                keyword: keyword,
+                                categoryID: nil,
+                                minPercent: minPercent,
+                                velocityThresh: alertType == "momentum" ? velocityThresh : 0
+                            )
                             dismiss()
                         }
                     }
-                    .disabled(keyword.isEmpty)
+                    .disabled(!isValid)
                 }
             }
         }

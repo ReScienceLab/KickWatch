@@ -19,10 +19,6 @@ var sortMap = map[string]string{
 func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sort := c.DefaultQuery("sort", "trending")
-		gqlSort, ok := sortMap[sort]
-		if !ok {
-			gqlSort = "MAGIC"
-		}
 		categoryID := c.Query("category_id")
 		cursor := c.Query("cursor")
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -30,8 +26,38 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
+		// "hot" sort: served from DB by velocity_24h
+		if sort == "hot" && db.IsEnabled() {
+			var campaigns []model.Campaign
+			q := db.DB.Where("state = 'live'").Order("velocity_24h DESC").Limit(limit)
+			if categoryID != "" {
+				q = q.Where("category_id = ?", categoryID)
+			}
+			if err := q.Find(&campaigns).Error; err == nil {
+				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nil, "total": len(campaigns)})
+				return
+			}
+		}
+
+		gqlSort, ok := sortMap[sort]
+		if !ok {
+			gqlSort = "MAGIC"
+		}
+
 		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
 		if err != nil {
+			// fallback to DB if GraphQL fails
+			if db.IsEnabled() {
+				var campaigns []model.Campaign
+				q := db.DB.Where("state = 'live'").Order("last_updated_at DESC").Limit(limit)
+				if categoryID != "" {
+					q = q.Where("category_id = ?", categoryID)
+				}
+				if dbErr := q.Find(&campaigns).Error; dbErr == nil && len(campaigns) > 0 {
+					c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nil, "total": len(campaigns)})
+					return
+				}
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

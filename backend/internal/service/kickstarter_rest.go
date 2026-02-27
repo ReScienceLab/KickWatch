@@ -1,8 +1,10 @@
 package service
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -50,9 +52,28 @@ type KickstarterRESTClient struct {
 	httpClient *http.Client
 }
 
-func NewKickstarterRESTClient() *KickstarterRESTClient {
+func NewKickstarterRESTClient(proxyURL string) *KickstarterRESTClient {
+	transport := &http.Transport{}
+	if proxyURL != "" {
+		parsed, err := url.Parse(proxyURL)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(parsed)
+			if parsed.User != nil {
+				creds := base64.StdEncoding.EncodeToString([]byte(parsed.User.String()))
+				transport.ProxyConnectHeader = http.Header{
+					"Proxy-Authorization": []string{"Basic " + creds},
+				}
+			}
+			log.Printf("KickstarterRESTClient: using proxy %s://%s", parsed.Scheme, parsed.Host)
+		} else {
+			log.Printf("KickstarterRESTClient: invalid proxy URL, ignoring: %v", err)
+		}
+	}
 	return &KickstarterRESTClient{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: transport,
+		},
 	}
 }
 
