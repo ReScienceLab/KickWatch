@@ -26,9 +26,17 @@ type APNsClient struct {
 }
 
 func NewAPNsClient(cfg *config.Config) (*APNsClient, error) {
-	keyData, err := os.ReadFile(cfg.APNSKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read apns key: %w", err)
+	var keyData []byte
+	var err error
+	if cfg.APNSKey != "" {
+		keyData = []byte(cfg.APNSKey)
+	} else if cfg.APNSKeyPath != "" {
+		keyData, err = os.ReadFile(cfg.APNSKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("read apns key: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("APNS_KEY or APNS_KEY_PATH must be set")
 	}
 	block, _ := pem.Decode(keyData)
 	if block == nil {

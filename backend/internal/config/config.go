@@ -9,6 +9,7 @@ type Config struct {
 	APNSTeamID   string
 	APNSBundleID string
 	APNSKeyPath  string
+	APNSKey      string
 	APNSEnv      string
 }
 
@@ -28,6 +29,7 @@ func Load() *Config {
 		APNSTeamID:   os.Getenv("APNS_TEAM_ID"),
 		APNSBundleID: os.Getenv("APNS_BUNDLE_ID"),
 		APNSKeyPath:  os.Getenv("APNS_KEY_PATH"),
+		APNSKey:      os.Getenv("APNS_KEY"),
 		APNSEnv:      apnsEnv,
 	}
 }
