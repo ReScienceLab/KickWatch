@@ -23,7 +23,6 @@ type restProject struct {
 	Pledged       string `json:"pledged"`
 	Currency      string `json:"currency"`
 	Deadline      int64  `json:"deadline"`
-	URL           string `json:"urls"`
 	Slug          string `json:"slug"`
 	Photo         struct {
 		Full string `json:"full"`
