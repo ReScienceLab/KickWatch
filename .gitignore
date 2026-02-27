@@ -35,6 +35,7 @@ Configs/Secrets.swift
 
 # Factory / Agent
 .factory/artifacts/
+.archive/
 
 # Git worktrees
 .worktrees/
