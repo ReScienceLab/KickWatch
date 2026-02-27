@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -44,10 +43,6 @@ func parseDiscoverPageHTML(html string) ([]model.Campaign, error) {
 	// Fallback: parse from HTML structure if no data attributes found
 	if len(campaigns) == 0 {
 		campaigns = parseFromHTMLStructure(doc)
-	}
-
-	if len(campaigns) == 0 && len(html) > 50_000 {
-		log.Printf("parser: 0 campaigns from %d-byte page — possible HTML structure change or blocked response", len(html))
 	}
 
 	return campaigns, nil
