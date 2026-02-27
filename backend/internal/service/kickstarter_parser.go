@@ -105,6 +105,11 @@ func extractCampaignFromData(data map[string]interface{}) model.Campaign {
 		campaign.PercentFunded = percentFunded
 	}
 
+	// Extract backers count
+	if backers, ok := data["backers_count"].(float64); ok {
+		campaign.BackersCount = int(backers)
+	}
+
 	// Extract creator (name + slug for URL construction)
 	var creatorSlug string
 	if creator, ok := data["creator"].(map[string]interface{}); ok {
