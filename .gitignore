@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Go
+backend/api
+backend/*.test
+vendor/
+
+# Environment
+.env
+.env.*
+*.env
+
+# Secrets
+Configs/Secrets.swift
+*.p8
+*.pem
+*.key
+
+# Factory / Agent
+.factory/artifacts/
