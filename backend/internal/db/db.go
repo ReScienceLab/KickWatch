@@ -37,6 +37,7 @@ func Init(cfg *config.Config) error {
 
 	if err := DB.AutoMigrate(
 		&model.Campaign{},
+		&model.CampaignSnapshot{},
 		&model.Category{},
 		&model.Device{},
 		&model.Alert{},

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -25,8 +26,8 @@ func main() {
 		log.Println("DATABASE_URL not set, running without database")
 	}
 
-	graphClient := service.NewKickstarterGraphClient()
-	restClient := service.NewKickstarterRESTClient()
+	graphClient := service.NewKickstarterGraphClient(cfg.ProxyURL)
+	restClient := service.NewKickstarterRESTClient(cfg.ProxyURL)
 
 	var cronSvc *service.CronService
 	if db.IsEnabled() {
@@ -41,6 +42,14 @@ func main() {
 		cronSvc = service.NewCronService(db.DB, restClient, apnsClient)
 		cronSvc.Start()
 		defer cronSvc.Stop()
+
+		go func() {
+			time.Sleep(3 * time.Second)
+			log.Println("Startup: triggering initial crawl")
+			if err := cronSvc.RunCrawlNow(); err != nil {
+				log.Printf("Startup crawl error: %v", err)
+			}
+		}()
 	}
 
 	r := gin.Default()

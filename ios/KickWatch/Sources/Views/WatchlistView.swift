@@ -53,7 +53,8 @@ struct WatchlistView: View {
             deadline: ISO8601DateFormatter().string(from: c.deadline),
             state: c.state, category_name: c.categoryName, category_id: c.categoryID,
             project_url: c.projectURL, creator_name: c.creatorName,
-            percent_funded: c.percentFunded, slug: nil
+            percent_funded: c.percentFunded, slug: nil,
+            velocity_24h: nil, pledge_delta_24h: nil, first_seen_at: nil
         )
     }
 }

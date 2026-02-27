@@ -6,7 +6,7 @@ struct DiscoverView: View {
     @State private var searchText = ""
     @State private var showSearch = false
 
-    private let sortOptions = [("trending", "Trending"), ("newest", "New"), ("ending", "Ending Soon")]
+    private let sortOptions = [("hot", "🔥 Hot"), ("trending", "Trending"), ("newest", "New"), ("ending", "Ending")]
 
     var body: some View {
         NavigationStack {

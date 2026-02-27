@@ -34,7 +34,7 @@ func NewCronService(db *gorm.DB, restClient *KickstarterRESTClient, apns *APNsCl
 func (s *CronService) Start() {
 	s.scheduler.AddFunc("0 2 * * *", func() {
 		log.Println("Cron: starting nightly crawl")
-		if err := s.runCrawl(); err != nil {
+		if err := s.RunCrawlNow(); err != nil {
 			log.Printf("Cron: crawl error: %v", err)
 		}
 	})
@@ -46,8 +46,10 @@ func (s *CronService) Stop() {
 	s.scheduler.Stop()
 }
 
-func (s *CronService) runCrawl() error {
+func (s *CronService) RunCrawlNow() error {
 	upserted := 0
+	var allCampaigns []model.Campaign
+
 	for _, catID := range rootCategories {
 		for page := 1; page <= 10; page++ {
 			campaigns, err := s.restClient.DiscoverCampaigns(catID, "newest", page)
@@ -74,13 +76,58 @@ func (s *CronService) runCrawl() error {
 				log.Printf("Cron: upsert error: %v", result.Error)
 			} else {
 				upserted += len(campaigns)
+				allCampaigns = append(allCampaigns, campaigns...)
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	log.Printf("Cron: crawl done, upserted %d campaigns", upserted)
 
+	if len(allCampaigns) > 0 {
+		s.storeSnapshots(allCampaigns)
+		s.computeVelocity(allCampaigns)
+	}
+
 	return s.matchAlerts()
+}
+
+func (s *CronService) storeSnapshots(campaigns []model.Campaign) {
+	snapshots := make([]model.CampaignSnapshot, 0, len(campaigns))
+	now := time.Now()
+	for _, c := range campaigns {
+		snapshots = append(snapshots, model.CampaignSnapshot{
+			CampaignPID:   c.PID,
+			PledgedAmount: c.PledgedAmount,
+			PercentFunded: c.PercentFunded,
+			SnapshotAt:    now,
+		})
+	}
+	if err := s.db.Create(&snapshots).Error; err != nil {
+		log.Printf("Cron: snapshot insert error: %v", err)
+	}
+}
+
+func (s *CronService) computeVelocity(campaigns []model.Campaign) {
+	cutoff := time.Now().Add(-25 * time.Hour)
+
+	for _, c := range campaigns {
+		var prev model.CampaignSnapshot
+		err := s.db.Where("campaign_pid = ? AND snapshot_at < ?", c.PID, cutoff).
+			Order("snapshot_at DESC").First(&prev).Error
+		if err != nil {
+			continue
+		}
+		if prev.PledgedAmount <= 0 {
+			continue
+		}
+		delta := c.PledgedAmount - prev.PledgedAmount
+		velocityPct := (delta / prev.PledgedAmount) * 100
+
+		s.db.Model(&model.Campaign{}).Where("pid = ?", c.PID).Updates(map[string]interface{}{
+			"velocity_24h":  velocityPct,
+			"ple_delta_24h": delta,
+		})
+	}
 }
 
 func (s *CronService) matchAlerts() error {
@@ -93,17 +140,33 @@ func (s *CronService) matchAlerts() error {
 
 	for _, alert := range alerts {
 		var campaigns []model.Campaign
-		query := s.db.Where(
-			"first_seen_at > ? AND name ILIKE ? AND percent_funded >= ?",
-			cutoff, "%"+alert.Keyword+"%", alert.MinPercent,
-		)
-		if alert.CategoryID != "" {
-			query = query.Where("category_id = ?", alert.CategoryID)
+
+		switch alert.AlertType {
+		case "momentum":
+			if alert.VelocityThresh <= 0 {
+				continue
+			}
+			if err := s.db.Where(
+				"first_seen_at > ? AND velocity_24h >= ?",
+				cutoff, alert.VelocityThresh,
+			).Find(&campaigns).Error; err != nil {
+				log.Printf("Cron: momentum match error for alert %s: %v", alert.ID, err)
+				continue
+			}
+		default: // "keyword"
+			query := s.db.Where(
+				"first_seen_at > ? AND name ILIKE ? AND percent_funded >= ?",
+				cutoff, "%"+alert.Keyword+"%", alert.MinPercent,
+			)
+			if alert.CategoryID != "" {
+				query = query.Where("category_id = ?", alert.CategoryID)
+			}
+			if err := query.Find(&campaigns).Error; err != nil {
+				log.Printf("Cron: keyword match error for alert %s: %v", alert.ID, err)
+				continue
+			}
 		}
-		if err := query.Find(&campaigns).Error; err != nil {
-			log.Printf("Cron: match query error for alert %s: %v", alert.ID, err)
-			continue
-		}
+
 		if len(campaigns) == 0 {
 			continue
 		}
@@ -135,8 +198,16 @@ func (s *CronService) sendAlertPush(alert model.Alert, matchCount int) {
 		return
 	}
 
+	var title string
+	switch alert.AlertType {
+	case "momentum":
+		title = fmt.Sprintf("%d campaigns surged +%.0f%% today", matchCount, alert.VelocityThresh)
+	default:
+		title = fmt.Sprintf("%d new \"%s\" campaigns", matchCount, alert.Keyword)
+	}
+
 	payload := APNsPayload{}
-	payload.APS.Alert.Title = fmt.Sprintf("%d new \"%s\" campaigns", matchCount, alert.Keyword)
+	payload.APS.Alert.Title = title
 	payload.APS.Alert.Body = "Tap to see today's matches in KickWatch"
 	payload.APS.Badge = 1
 	payload.APS.Sound = "default"

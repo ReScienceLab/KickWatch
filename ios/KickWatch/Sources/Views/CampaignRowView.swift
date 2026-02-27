@@ -44,8 +44,32 @@ struct CampaignRowView: View {
                     Text("\(days)d left")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
+                momentumBadge
             }
         }
+    }
+
+    @ViewBuilder
+    private var momentumBadge: some View {
+        if let v = campaign.velocity_24h, v > 0 {
+            let (icon, color): (String, Color) = v >= 200 ? ("🔥", .red) : ("⚡", .orange)
+            Text("\(icon) +\(Int(v))%")
+                .font(.caption2).fontWeight(.semibold)
+                .foregroundStyle(color)
+        } else if isNew {
+            Text("New")
+                .font(.caption2).fontWeight(.semibold)
+                .padding(.horizontal, 5).padding(.vertical, 2)
+                .background(Color.blue.opacity(0.15))
+                .foregroundStyle(.blue)
+                .clipShape(Capsule())
+        }
+    }
+
+    private var isNew: Bool {
+        guard let s = campaign.first_seen_at,
+              let date = ISO8601DateFormatter().date(from: s) else { return false }
+        return Date().timeIntervalSince(date) < 48 * 3600
     }
 
     private var fundingBar: some View {

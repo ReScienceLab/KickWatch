@@ -17,12 +17,14 @@ final class AlertsViewModel {
         isLoading = false
     }
 
-    func createAlert(deviceID: String, keyword: String, categoryID: String?, minPercent: Double) async {
+    func createAlert(deviceID: String, alertType: String = "keyword", keyword: String = "", categoryID: String? = nil, minPercent: Double = 0, velocityThresh: Double = 0) async {
         let req = CreateAlertRequest(
             device_id: deviceID,
-            keyword: keyword,
+            alert_type: alertType,
+            keyword: keyword.isEmpty ? nil : keyword,
             category_id: categoryID,
-            min_percent: minPercent > 0 ? minPercent : nil
+            min_percent: minPercent > 0 ? minPercent : nil,
+            velocity_thresh: velocityThresh > 0 ? velocityThresh : nil
         )
         do {
             let alert = try await APIClient.shared.createAlert(req)
