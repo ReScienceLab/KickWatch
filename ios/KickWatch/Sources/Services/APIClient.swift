@@ -16,6 +16,9 @@ struct CampaignDTO: Codable {
     let creator_name: String?
     let percent_funded: Double?
     let slug: String?
+    let velocity_24h: Double?
+    let pledge_delta_24h: Double?
+    let first_seen_at: String?
 }
 
 struct CategoryDTO: Codable {
@@ -45,17 +48,21 @@ struct RegisterDeviceResponse: Codable {
 
 struct CreateAlertRequest: Codable {
     let device_id: String
-    let keyword: String
+    let alert_type: String?
+    let keyword: String?
     let category_id: String?
     let min_percent: Double?
+    let velocity_thresh: Double?
 }
 
 struct AlertDTO: Codable {
     let id: String
     let device_id: String
+    let alert_type: String?
     let keyword: String
     let category_id: String?
     let min_percent: Double
+    let velocity_thresh: Double?
     let is_enabled: Bool
     let created_at: String
     let last_matched_at: String?

@@ -23,8 +23,25 @@ type Campaign struct {
 	CreatorName   string    `json:"creator_name"`
 	PercentFunded float64   `json:"percent_funded"`
 	Slug          string    `json:"slug"`
+	Velocity24h   float64   `gorm:"default:0" json:"velocity_24h"`
+	PleDelta24h   float64   `gorm:"default:0" json:"pledge_delta_24h"`
 	FirstSeenAt   time.Time `gorm:"not null;default:now()" json:"first_seen_at"`
 	LastUpdatedAt time.Time `gorm:"not null;default:now()" json:"last_updated_at"`
+}
+
+type CampaignSnapshot struct {
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	CampaignPID   string    `gorm:"index;not null" json:"campaign_pid"`
+	PledgedAmount float64   `json:"pledged_amount"`
+	PercentFunded float64   `json:"percent_funded"`
+	SnapshotAt    time.Time `gorm:"index;not null;default:now()" json:"snapshot_at"`
+}
+
+func (s *CampaignSnapshot) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == uuid.Nil {
+		s.ID = uuid.New()
+	}
+	return nil
 }
 
 type Category struct {
@@ -47,19 +64,24 @@ func (d *Device) BeforeCreate(tx *gorm.DB) error {
 }
 
 type Alert struct {
-	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	DeviceID      uuid.UUID  `gorm:"type:uuid;index;not null" json:"device_id"`
-	Keyword       string     `gorm:"not null" json:"keyword"`
-	CategoryID    string     `json:"category_id,omitempty"`
-	MinPercent    float64    `gorm:"default:0" json:"min_percent"`
-	IsEnabled     bool       `gorm:"default:true" json:"is_enabled"`
-	CreatedAt     time.Time  `json:"created_at"`
-	LastMatchedAt *time.Time `json:"last_matched_at,omitempty"`
+	ID             uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	DeviceID       uuid.UUID  `gorm:"type:uuid;index;not null" json:"device_id"`
+	AlertType      string     `gorm:"not null;default:'keyword'" json:"alert_type"`
+	Keyword        string     `json:"keyword"`
+	CategoryID     string     `json:"category_id,omitempty"`
+	MinPercent     float64    `gorm:"default:0" json:"min_percent"`
+	VelocityThresh float64    `gorm:"default:0" json:"velocity_thresh"`
+	IsEnabled      bool       `gorm:"default:true" json:"is_enabled"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastMatchedAt  *time.Time `json:"last_matched_at,omitempty"`
 }
 
 func (a *Alert) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
+	}
+	if a.AlertType == "" {
+		a.AlertType = "keyword"
 	}
 	return nil
 }
