@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -109,6 +110,15 @@ func (c *ScrapingBeeClient) FetchUsage(ctx context.Context) (*UsageResult, error
 	return &usage, nil
 }
 
+// isCFChallengePage returns true when the response is a Cloudflare interstitial
+// challenge rather than real page content. CF challenge pages are small (<200KB)
+// and always contain the challenge-platform main.js script. Real Kickstarter
+// discover pages are 500KB+ and do not require client-side JS challenge resolution.
+func isCFChallengePage(html string) bool {
+	const cfMarker = "challenge-platform/scripts/jsd/main.js"
+	return strings.Contains(html, cfMarker) && len(html) < 200_000
+}
+
 func (c *ScrapingBeeClient) doRequest(ctx context.Context, targetURL string, useAI bool, aiQuery, aiSelector string, sessionID int) (string, error) {
 	if err := c.rateLimiter.Acquire(ctx); err != nil {
 		return "", fmt.Errorf("rate limiter: %w", err)
@@ -195,10 +205,20 @@ func (c *ScrapingBeeClient) doRequest(ctx context.Context, targetURL string, use
 			return "", fmt.Errorf("read response: %w", err)
 		}
 
-		credits := resp.Header.Get("Spb-Cost")
-		log.Printf("ScrapingBee success: url=%s, credits=%s, useAI=%v, premium=%v", targetURL, credits, useAI, premiumProxy)
+		// Detect Cloudflare JS challenge pages (HTTP 200 but no real content).
+		// CF challenge pages are small and contain the challenge-platform script.
+		// Real Kickstarter pages are 500KB+ and contain project data.
+		bodyStr := string(body)
+		if isCFChallengePage(bodyStr) {
+			lastErr = fmt.Errorf("cloudflare challenge page detected (size=%d)", len(body))
+			log.Printf("ScrapingBee: CF challenge at %s (size=%d, premium=%v), retrying", targetURL, len(body), premiumProxy)
+			continue
+		}
 
-		return string(body), nil
+		credits := resp.Header.Get("Spb-Cost")
+		log.Printf("ScrapingBee success: url=%s, credits=%s, size=%d, useAI=%v, premium=%v", targetURL, credits, len(body), useAI, premiumProxy)
+
+		return bodyStr, nil
 	}
 
 	return "", fmt.Errorf("failed after 4 attempts: %w", lastErr)
