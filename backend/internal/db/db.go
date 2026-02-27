@@ -94,6 +94,31 @@ func Init(cfg *config.Config) error {
 		return fmt.Errorf("migrate campaigns pk: %w", err)
 	}
 
+	// Ensure velocity_24h and pledge_delta_24h columns exist (added in develop branch)
+	if err := DB.Exec(`
+		DO $$
+		BEGIN
+			-- Add velocity_24h column if it doesn't exist
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaigns' AND column_name = 'velocity_24h'
+			) THEN
+				ALTER TABLE campaigns ADD COLUMN velocity_24h DOUBLE PRECISION DEFAULT 0;
+			END IF;
+
+			-- Add pledge_delta_24h column if it doesn't exist (named ple_delta_24h in DB due to GORM naming)
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaigns' AND column_name = 'ple_delta_24h'
+			) THEN
+				ALTER TABLE campaigns ADD COLUMN ple_delta_24h DOUBLE PRECISION DEFAULT 0;
+			END IF;
+		END
+		$$;
+	`).Error; err != nil {
+		return fmt.Errorf("migrate velocity columns: %w", err)
+	}
+
 	log.Println("Database connected and migrated")
 	return nil
 }
