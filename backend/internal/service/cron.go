@@ -112,6 +112,16 @@ func (s *CronService) RunCrawlNow() error {
 	}
 	log.Printf("Cron: crawl done, upserted %d campaigns", upserted)
 
+	// Sanity check: a full crawl across all categories should always yield
+	// at least some campaigns. Zero almost certainly means a parse failure
+	// (e.g. Kickstarter changed their HTML structure), not a genuinely empty site.
+	const minExpectedCampaigns = 50
+	if upserted < minExpectedCampaigns {
+		log.Printf("ERROR: crawl sanity check FAILED — only %d campaigns upserted (expected >=%d). "+
+			"Possible HTML structure change or ScrapingBee degradation. "+
+			"Check kickstarter_parser.go [data-project] selector.", upserted, minExpectedCampaigns)
+	}
+
 	if len(allCampaigns) > 0 {
 		s.storeSnapshots(allCampaigns)
 		s.computeVelocity(allCampaigns)
