@@ -90,9 +90,9 @@ actor APIClient {
 
     init(baseURL: String? = nil) {
         #if DEBUG
-        self.baseURL = baseURL ?? "http://localhost:8080"
+        self.baseURL = baseURL ?? "https://api-dev.kickwatch.rescience.com"
         #else
-        self.baseURL = baseURL ?? "https://api.kickwatch.app"
+        self.baseURL = baseURL ?? "https://api.kickwatch.rescience.com"
         #endif
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
