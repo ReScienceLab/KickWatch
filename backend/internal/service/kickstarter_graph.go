@@ -151,12 +151,12 @@ type graphSearchResp struct {
 	Data struct {
 		Projects struct {
 			Nodes []struct {
-				PID           string  `json:"pid"`
-				Name          string  `json:"name"`
-				State         string  `json:"state"`
-				DeadlineAt    *string `json:"deadlineAt"`
-				PercentFunded float64 `json:"percentFunded"`
-				URL           string  `json:"url"`
+				PID           json.Number `json:"pid"`
+				Name          string      `json:"name"`
+				State         string      `json:"state"`
+				DeadlineAt    *string     `json:"deadlineAt"`
+				PercentFunded float64     `json:"percentFunded"`
+				URL           string      `json:"url"`
 				Image         *struct {
 					URL string `json:"url"`
 				} `json:"image"`
@@ -212,7 +212,7 @@ func (c *KickstarterGraphClient) Search(term, categoryID, sort, cursor string, f
 	campaigns := make([]model.Campaign, 0, len(resp.Data.Projects.Nodes))
 	for _, n := range resp.Data.Projects.Nodes {
 		cam := model.Campaign{
-			PID:        n.PID,
+			PID:        n.PID.String(),
 			Name:       n.Name,
 			State:      n.State,
 			ProjectURL: n.URL,
