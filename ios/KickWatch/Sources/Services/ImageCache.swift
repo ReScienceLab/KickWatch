@@ -3,10 +3,15 @@ import SwiftUI
 actor ImageCache {
     static let shared = ImageCache()
     private var cache: [URL: Image] = [:]
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
 
     func image(for url: URL) async -> Image? {
         if let cached = cache[url] { return cached }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let (data, _) = try? await session.data(from: url),
               let uiImage = UIImage(data: data) else { return nil }
         let image = Image(uiImage: uiImage)
         cache[url] = image

@@ -3,6 +3,8 @@ import SwiftData
 
 @Observable
 final class DiscoverViewModel {
+    private let client: any APIClientProtocol
+
     var campaigns: [CampaignDTO] = []
     var categories: [CategoryDTO] = []
     var isLoading = false
@@ -14,11 +16,15 @@ final class DiscoverViewModel {
     var selectedSort = "trending"
     var selectedCategoryID: String?
 
+    init(client: any APIClientProtocol = APIClient.shared) {
+        self.client = client
+    }
+
     func load() async {
         isLoading = true
         error = nil
         do {
-            let resp = try await APIClient.shared.fetchCampaigns(
+            let resp = try await client.fetchCampaigns(
                 sort: selectedSort, categoryID: selectedCategoryID, cursor: nil
             )
             campaigns = resp.campaigns
@@ -34,7 +40,7 @@ final class DiscoverViewModel {
         guard hasMore, let cursor = nextCursor, !isLoadingMore else { return }
         isLoadingMore = true
         do {
-            let resp = try await APIClient.shared.fetchCampaigns(
+            let resp = try await client.fetchCampaigns(
                 sort: selectedSort, categoryID: selectedCategoryID, cursor: cursor
             )
             campaigns.append(contentsOf: resp.campaigns)
@@ -49,7 +55,7 @@ final class DiscoverViewModel {
     func loadCategories() async {
         guard categories.isEmpty else { return }
         do {
-            categories = try await APIClient.shared.fetchCategories()
+            categories = try await client.fetchCategories()
         } catch {
             print("DiscoverViewModel: failed to load categories: \(error)")
         }
