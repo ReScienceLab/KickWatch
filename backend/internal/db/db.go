@@ -119,6 +119,23 @@ func Init(cfg *config.Config) error {
 		return fmt.Errorf("migrate velocity columns: %w", err)
 	}
 
+	// Fix campaign_snapshots FK: rename campaign_p_id -> campaign_pid (same issue as campaigns.pid)
+	if err := DB.Exec(`
+		DO $$
+		BEGIN
+			-- Rename column if it exists with old snake_case name
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'campaign_snapshots' AND column_name = 'campaign_p_id'
+			) THEN
+				ALTER TABLE campaign_snapshots RENAME COLUMN campaign_p_id TO campaign_pid;
+			END IF;
+		END
+		$$;
+	`).Error; err != nil {
+		return fmt.Errorf("migrate campaign_snapshots fk: %w", err)
+	}
+
 	log.Println("Database connected and migrated")
 	return nil
 }
