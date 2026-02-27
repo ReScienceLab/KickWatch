@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,6 +46,14 @@ func NewKickstarterGraphClient(proxyURL string) *KickstarterGraphClient {
 		parsed, err := url.Parse(proxyURL)
 		if err == nil {
 			transport.Proxy = http.ProxyURL(parsed)
+			// Explicitly set Proxy-Authorization for HTTPS CONNECT tunneling.
+			// Go's http.Transport does not auto-retry 407 challenges for CONNECT.
+			if parsed.User != nil {
+				creds := base64.StdEncoding.EncodeToString([]byte(parsed.User.String()))
+				transport.ProxyConnectHeader = http.Header{
+					"Proxy-Authorization": []string{"Basic " + creds},
+				}
+			}
 			log.Printf("KickstarterGraphClient: using proxy %s://%s", parsed.Scheme, parsed.Host)
 		} else {
 			log.Printf("KickstarterGraphClient: invalid proxy URL, ignoring: %v", err)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -57,6 +58,12 @@ func NewKickstarterRESTClient(proxyURL string) *KickstarterRESTClient {
 		parsed, err := url.Parse(proxyURL)
 		if err == nil {
 			transport.Proxy = http.ProxyURL(parsed)
+			if parsed.User != nil {
+				creds := base64.StdEncoding.EncodeToString([]byte(parsed.User.String()))
+				transport.ProxyConnectHeader = http.Header{
+					"Proxy-Authorization": []string{"Basic " + creds},
+				}
+			}
 			log.Printf("KickstarterRESTClient: using proxy %s://%s", parsed.Scheme, parsed.Host)
 		} else {
 			log.Printf("KickstarterRESTClient: invalid proxy URL, ignoring: %v", err)
