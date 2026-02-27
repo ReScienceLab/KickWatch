@@ -115,6 +115,24 @@ func GetCampaign(c *gin.Context) {
 	c.JSON(http.StatusOK, campaign)
 }
 
+// GetCampaignHistory returns daily pledge snapshots for a campaign, oldest first.
+func GetCampaignHistory(c *gin.Context) {
+	pid := c.Param("pid")
+	if !db.IsEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not available"})
+		return
+	}
+	var snapshots []model.CampaignSnapshot
+	if err := db.DB.
+		Where("campaign_pid = ?", pid).
+		Order("snapshot_date ASC").
+		Find(&snapshots).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, snapshots)
+}
+
 func ListCategories(client *service.KickstarterScrapingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db.IsEnabled() {

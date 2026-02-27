@@ -31,11 +31,14 @@ type Campaign struct {
 }
 
 type CampaignSnapshot struct {
-	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	CampaignPID   string    `gorm:"index;not null" json:"campaign_pid"`
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	CampaignPID string    `gorm:"not null;uniqueIndex:idx_campaign_snapshot_date" json:"campaign_pid"`
+	// SnapshotDate is the UTC calendar day; one row per (campaign, day).
+	SnapshotDate  time.Time `gorm:"type:date;not null;uniqueIndex:idx_campaign_snapshot_date" json:"snapshot_date"`
 	PledgedAmount float64   `json:"pledged_amount"`
 	PercentFunded float64   `json:"percent_funded"`
-	SnapshotAt    time.Time `gorm:"index;not null;default:now()" json:"snapshot_at"`
+	BackersCount  int       `gorm:"default:0" json:"backers_count"`
+	SnapshotAt    time.Time `gorm:"not null;default:now()" json:"snapshot_at"`
 }
 
 func (s *CampaignSnapshot) BeforeCreate(tx *gorm.DB) error {

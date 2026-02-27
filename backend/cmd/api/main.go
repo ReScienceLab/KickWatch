@@ -72,6 +72,7 @@ func main() {
 		api.GET("/campaigns", handler.ListCampaigns(scrapingService))
 		api.GET("/campaigns/search", handler.SearchCampaigns(scrapingService))
 		api.GET("/campaigns/:pid", handler.GetCampaign)
+		api.GET("/campaigns/:pid/history", handler.GetCampaignHistory)
 		api.GET("/categories", handler.ListCategories(scrapingService))
 
 		api.POST("/devices/register", handler.RegisterDevice)

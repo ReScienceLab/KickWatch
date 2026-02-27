@@ -38,6 +38,14 @@ struct SearchResponse: Codable {
     let next_cursor: String?
 }
 
+struct CampaignSnapshotDTO: Codable {
+    let campaign_pid: String
+    let snapshot_date: String
+    let pledged_amount: Double
+    let percent_funded: Double
+    let backers_count: Int?
+}
+
 struct RegisterDeviceRequest: Codable {
     let device_token: String
 }
@@ -153,6 +161,10 @@ actor APIClient {
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw APIError.invalidResponse
         }
+    }
+
+    func fetchCampaignHistory(pid: String) async throws -> [CampaignSnapshotDTO] {
+        return try await get(url: URL(string: baseURL + "/api/campaigns/\(pid)/history")!)
     }
 
     func fetchAlertMatches(alertID: String) async throws -> [CampaignDTO] {
