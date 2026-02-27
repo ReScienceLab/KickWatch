@@ -46,6 +46,23 @@ func Init(cfg *config.Config) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
+	// Ensure campaigns.pid has a primary key constraint (AutoMigrate does not
+	// add PKs to pre-existing tables; this DO block is idempotent).
+	if err := DB.Exec(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM information_schema.table_constraints
+				WHERE table_name = 'campaigns' AND constraint_type = 'PRIMARY KEY'
+			) THEN
+				ALTER TABLE campaigns ADD PRIMARY KEY (pid);
+			END IF;
+		END
+		$$;
+	`).Error; err != nil {
+		return fmt.Errorf("migrate campaigns pk: %w", err)
+	}
+
 	log.Println("Database connected and migrated")
 	return nil
 }
