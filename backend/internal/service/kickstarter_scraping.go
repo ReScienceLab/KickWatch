@@ -41,7 +41,7 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 	discoverURL := s.buildDiscoverURL(term, categoryID, sort, page)
 
 	// Try AI extraction first
-	aiQuery := "Extract all projects from this page. For each project return: name, slug, project_url (full Kickstarter URL), goal amount, pledged amount, currency, deadline date, creator name, category, photo URL, blurb."
+	aiQuery := "Extract all projects from this page. For each project return a JSON object with these fields: name, slug, creator_slug (the creator's URL slug, e.g. 'john-doe' from kickstarter.com/projects/john-doe/...), project_url (full canonical Kickstarter URL), goal, pledged, currency, deadline, creator, category, photo_url, blurb."
 
 	aiResult, err := s.client.ExtractWithAI(ctx, discoverURL, aiQuery)
 	if err == nil {
@@ -168,6 +168,7 @@ func (s *KickstarterScrapingService) parseAIResponse(jsonData string) ([]model.C
 		Projects []struct {
 			Name         string  `json:"name"`
 			Slug         string  `json:"slug"`
+			CreatorSlug  string  `json:"creator_slug"`
 			ProjectURL   string  `json:"project_url"`
 			Goal         float64 `json:"goal"`
 			Pledged      float64 `json:"pledged"`
@@ -215,16 +216,18 @@ func (s *KickstarterScrapingService) parseAIResponse(jsonData string) ([]model.C
 			}
 		}
 
-		// Use project URL from AI if provided, otherwise build from slug
+		// Use project URL from AI if provided, otherwise build from creator_slug + slug
 		if p.ProjectURL != "" {
 			campaign.ProjectURL = p.ProjectURL
-			// Extract PID from URL or use slug
 			campaign.PID = extractPIDFromURL(p.ProjectURL)
 			if campaign.PID == "" {
 				campaign.PID = campaign.Slug
 			}
+		} else if p.CreatorSlug != "" && campaign.Slug != "" {
+			campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s/%s", p.CreatorSlug, campaign.Slug)
+			campaign.PID = campaign.Slug
 		} else if campaign.Slug != "" {
-			campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s", campaign.Slug)
+			// Cannot construct a valid URL without the creator slug; leave ProjectURL empty
 			campaign.PID = campaign.Slug
 		}
 

@@ -105,10 +105,14 @@ func extractCampaignFromData(data map[string]interface{}) model.Campaign {
 		campaign.PercentFunded = percentFunded
 	}
 
-	// Extract creator
+	// Extract creator (name + slug for URL construction)
+	var creatorSlug string
 	if creator, ok := data["creator"].(map[string]interface{}); ok {
 		if name, ok := creator["name"].(string); ok {
 			campaign.CreatorName = name
+		}
+		if slug, ok := creator["slug"].(string); ok {
+			creatorSlug = slug
 		}
 	}
 
@@ -137,10 +141,11 @@ func extractCampaignFromData(data map[string]interface{}) model.Campaign {
 			}
 		}
 	}
-	// Fallback to building from slug only if no canonical URL provided
-	if campaign.ProjectURL == "" && campaign.Slug != "" {
-		campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s", campaign.Slug)
+	// Fallback: use creator slug + project slug (full path) when canonical URL is absent
+	if campaign.ProjectURL == "" && creatorSlug != "" && campaign.Slug != "" {
+		campaign.ProjectURL = fmt.Sprintf("https://www.kickstarter.com/projects/%s/%s", creatorSlug, campaign.Slug)
 	}
+	// Do not synthesize a URL from project slug alone — the result would be invalid
 
 	return campaign
 }

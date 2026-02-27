@@ -36,7 +36,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			return
 		}
 
-		nextCursor := ""
+		var nextCursor interface{}
 		if result.HasNextPage {
 			nextCursor = result.NextCursor
 		}
@@ -64,7 +64,7 @@ func SearchCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc
 			return
 		}
 
-		nextCursor := ""
+		var nextCursor interface{}
 		if result.HasNextPage {
 			nextCursor = result.NextCursor
 		}
