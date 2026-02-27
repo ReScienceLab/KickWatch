@@ -29,7 +29,7 @@ targets:
       path: KickWatch/KickWatch.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.kickwatch.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.rescience.kickwatch
         INFOPLIST_FILE: KickWatch/Info.plist
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 7Q28CBP3S5
