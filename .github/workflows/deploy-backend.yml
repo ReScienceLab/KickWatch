@@ -138,14 +138,14 @@ jobs:
                   { "name": "PORT",         "value": "8080" },
                   { "name": "GIN_MODE",     "value": "${{ env.GIN_MODE }}" },
                   { "name": "APP_ENV",      "value": "${{ env.DEPLOY_ENV }}" },
-                  { "name": "APNS_ENV",     "value": "${{ env.IS_PROD == 'true' && 'production' || 'sandbox' }}" },
-                  { "name": "APNS_KEY_PATH","value": "/secrets/apns.p8" }
+                  { "name": "APNS_ENV", "value": "${{ env.IS_PROD == 'true' && 'production' || 'sandbox' }}" }
                 ],
                 "secrets": [
                   { "name": "DATABASE_URL",   "valueFrom": "${{ steps.secrets.outputs.db_arn }}" },
                   { "name": "APNS_KEY_ID",    "valueFrom": "${{ steps.secrets.outputs.apns_key_id_arn }}" },
                   { "name": "APNS_TEAM_ID",   "valueFrom": "${{ steps.secrets.outputs.apns_team_id_arn }}" },
-                  { "name": "APNS_BUNDLE_ID", "valueFrom": "${{ steps.secrets.outputs.apns_bundle_id_arn }}" }
+                  { "name": "APNS_BUNDLE_ID", "valueFrom": "${{ steps.secrets.outputs.apns_bundle_id_arn }}" },
+                  { "name": "APNS_KEY",       "valueFrom": "${{ steps.secrets.outputs.apns_key_arn }}" }
                 ],
                 "readonlyRootFilesystem": true,
                 "linuxParameters": { "initProcessEnabled": true },
