@@ -25,7 +25,7 @@ func NewKickstarterScrapingService(apiKey string, maxConcurrent int) *Kickstarte
 	}
 }
 
-// Search searches for campaigns using AI extraction (10 credits per request)
+// Search searches for campaigns using AI extraction (6 credits per request).
 func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor string, first int) (*SearchResult, error) {
 	ctx := context.Background()
 
@@ -40,10 +40,11 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 	// Build Kickstarter discover URL with page
 	discoverURL := s.buildDiscoverURL(term, categoryID, sort, page)
 
-	// Try AI extraction first
+	// Try AI extraction first; ai_selector focuses only on project cards, reducing processing time.
 	aiQuery := "Extract all projects from this page. For each project return a JSON object with these fields: name, slug, creator_slug (the creator's URL slug, e.g. 'john-doe' from kickstarter.com/projects/john-doe/...), project_url (full canonical Kickstarter URL), goal, pledged, currency, deadline, creator, category, photo_url, blurb."
+	aiSelector := "[data-project]"
 
-	aiResult, err := s.client.ExtractWithAI(ctx, discoverURL, aiQuery)
+	aiResult, err := s.client.ExtractWithAI(ctx, discoverURL, aiQuery, aiSelector)
 	if err == nil {
 		campaigns, parseErr := s.parseAIResponse(aiResult)
 		if parseErr == nil && len(campaigns) > 0 {
@@ -69,7 +70,7 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 	}
 
 	// Fallback to HTML parsing
-	html, err := s.client.FetchHTML(ctx, discoverURL)
+	html, err := s.client.FetchHTMLInSession(ctx, discoverURL, 0)
 	if err != nil {
 		return nil, fmt.Errorf("fetch HTML: %w", err)
 	}
@@ -96,15 +97,14 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 	}, nil
 }
 
-// DiscoverCampaigns fetches campaigns for a specific category using HTML parsing (5 credits)
-func (s *KickstarterScrapingService) DiscoverCampaigns(categoryID string, sort string, page int) ([]model.Campaign, error) {
+// DiscoverCampaigns fetches campaigns for a specific category using HTML parsing (1 credit).
+// sessionID routes all pages for the same category through the same proxy IP (sticky session).
+func (s *KickstarterScrapingService) DiscoverCampaigns(categoryID string, sort string, page int, sessionID int) ([]model.Campaign, error) {
 	ctx := context.Background()
 
-	// Build URL
 	discoverURL := s.buildDiscoverURL("", categoryID, sort, page)
 
-	// Fetch HTML only (cheaper than AI extraction)
-	html, err := s.client.FetchHTML(ctx, discoverURL)
+	html, err := s.client.FetchHTMLInSession(ctx, discoverURL, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch HTML: %w", err)
 	}
@@ -122,6 +122,28 @@ func (s *KickstarterScrapingService) DiscoverCampaigns(categoryID string, sort s
 // FetchCategories returns hardcoded category list (0 credits)
 func (s *KickstarterScrapingService) FetchCategories() ([]model.Category, error) {
 	return kickstarterCategories, nil
+}
+
+// LogUsage fetches and logs the current monthly credit consumption.
+// Logs a WARNING if usage exceeds 80% of the monthly allowance.
+func (s *KickstarterScrapingService) LogUsage() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	usage, err := s.client.FetchUsage(ctx)
+	if err != nil {
+		log.Printf("ScrapingBee usage check failed: %v", err)
+		return
+	}
+	pct := 0.0
+	if usage.MaxCredits > 0 {
+		pct = float64(usage.UsedCredits) / float64(usage.MaxCredits) * 100
+	}
+	log.Printf("ScrapingBee usage: %d/%d credits (%.1f%%), renews %s",
+		usage.UsedCredits, usage.MaxCredits, pct, usage.RenewalDate)
+	if pct >= 80 {
+		log.Printf("WARNING: ScrapingBee credits above 80%% (%d/%d) — consider upgrading plan",
+			usage.UsedCredits, usage.MaxCredits)
+	}
 }
 
 func (s *KickstarterScrapingService) buildDiscoverURL(term, categoryID, sort string, page int) string {

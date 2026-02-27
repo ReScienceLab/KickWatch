@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"time"
@@ -48,6 +50,27 @@ func (s *CronService) Start() {
 	})
 	s.scheduler.Start()
 	log.Println("Cron scheduler started (02:00 UTC daily)")
+
+	// Log credit balance at startup so we know headroom before the first crawl.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		usage, err := s.scrapingService.client.FetchUsage(ctx)
+		if err != nil {
+			log.Printf("ScrapingBee usage check failed: %v", err)
+			return
+		}
+		pct := 0.0
+		if usage.MaxCredits > 0 {
+			pct = float64(usage.UsedCredits) / float64(usage.MaxCredits) * 100
+		}
+		log.Printf("ScrapingBee usage: %d/%d credits (%.1f%%), renews %s",
+			usage.UsedCredits, usage.MaxCredits, pct, usage.RenewalDate)
+		if pct >= 80 {
+			log.Printf("WARNING: ScrapingBee credits above 80%% (%d/%d) — consider upgrading plan",
+				usage.UsedCredits, usage.MaxCredits)
+		}
+	}()
 }
 
 func (s *CronService) Stop() {
@@ -97,11 +120,12 @@ func (s *CronService) RunCrawlNow() error {
 
 	for _, sortCfg := range buildCrawlSorts() {
 		for _, cat := range crawlCategories {
-			// sortCfg.pageDepth is env-configurable (can raise or lower).
-			// cat.PageDepth is only the default used when no env var is set.
 			depth := sortCfg.pageDepth
+			// Assign a sticky session_id so all pages for this (sort, category)
+			// pass through the same proxy IP — less likely to trigger rate limits.
+			sessionID := rand.Intn(10_000_000) + 1
 			for page := 1; page <= depth; page++ {
-				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page)
+				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page, sessionID)
 				if err != nil {
 					log.Printf("Cron: ScrapingBee error sort=%s cat=%s page=%d: %v", sortCfg.sort, cat.ID, page, err)
 					break
@@ -172,8 +196,9 @@ func (s *CronService) RunBackfill() error {
 	for _, sortCfg := range sorts {
 		for _, cat := range crawlCategories {
 			depth := sortCfg.depth
+			sessionID := rand.Intn(10_000_000) + 1
 			for page := 1; page <= depth; page++ {
-				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page)
+				campaigns, err := s.scrapingService.DiscoverCampaigns(cat.ID, sortCfg.sort, page, sessionID)
 				if err != nil {
 					log.Printf("Backfill: error sort=%s cat=%s page=%d: %v", sortCfg.sort, cat.ID, page, err)
 					break
