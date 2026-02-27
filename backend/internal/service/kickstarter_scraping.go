@@ -143,7 +143,7 @@ func (s *KickstarterScrapingService) buildDiscoverURL(term, categoryID, sort str
 		params.Set("sort", "magic")
 	case "NEWEST", "newest":
 		params.Set("sort", "newest")
-	case "END_DATE", "ending":
+	case "END_DATE", "end_date", "ending":
 		params.Set("sort", "end_date")
 	default:
 		params.Set("sort", "magic")
