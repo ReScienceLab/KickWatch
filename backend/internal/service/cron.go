@@ -42,7 +42,23 @@ func (s *CronService) Stop() {
 	s.scheduler.Stop()
 }
 
+// syncCategories upserts the canonical category list into the DB so that
+// clients and alert filters always see the current IDs and subcategories.
+func (s *CronService) syncCategories() {
+	result := s.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name", "parent_id"}),
+	}).Create(&kickstarterCategories)
+	if result.Error != nil {
+		log.Printf("Cron: category sync error: %v", result.Error)
+	} else {
+		log.Printf("Cron: synced %d categories", len(kickstarterCategories))
+	}
+}
+
 func (s *CronService) RunCrawlNow() error {
+	s.syncCategories()
+
 	upserted := 0
 	var allCampaigns []model.Campaign
 
