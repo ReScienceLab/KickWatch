@@ -65,23 +65,90 @@ Daily Kickstarter campaign monitor. iOS app + Go backend deployed on AWS ECS.
 
 ## Git Workflow
 
-Git Flow branching:
-- `main` — production, never push directly
-- `develop` — integration branch
-- `feature/<name>` — branch from develop, PR → develop
-- `fix/<name>` — branch from develop, PR → develop
-- `hotfix/<name>` — branch from main, merge to main + develop
+We use **Git Flow** for version control.
 
-### Commit Convention
-- `feat:` / `fix:` / `docs:` / `test:` / `refactor:` / `chore:` / `security:`
-- Reference issues: `feat(#12): add keyword alerts`
-- No AI-generated signatures in commit messages
+### Branching Strategy
+
+- `main` — Production branch, always deployable, tagged releases
+- `develop` — Integration branch for features
+- `feature/<name>` — New features (branch from develop, PR → develop)
+- `fix/<name>` — Bug fixes (branch from develop, PR → develop)
+- `hotfix/<name>` — Urgent production fixes (branch from main, merge to main + develop)
+- `release/<version>` — Release prep (branch from develop, merge to main + develop, tag)
 
 ### Rules
-- Never merge directly into `main`
+
+- Feature/fix branches PR directly to `develop` — no chaining PRs
+- **Never merge directly into `main`** — `main` is only updated via PR (release or hotfix branches)
+- To sync: only sync `develop` (pull/merge PRs). Do NOT fast-forward `main` from `develop`.
+- Merged branches must be deleted immediately
 - Never force-push `main` or `develop`
-- Delete merged branches immediately
-- Use `git worktree` for feature branches
+- Use `git worktree` for feature branches to avoid disrupting the main working directory
+
+### Commit Convention
+
+- `feat:` — New features
+- `fix:` — Bug fixes
+- `docs:` — Documentation
+- `test:` — Test additions/changes
+- `refactor:` — Code refactoring
+- `chore:` — Maintenance
+- `security:` — Security fixes
+
+Reference issues: `feat(#12): add keyword alerts`
+
+**Important**: Do not add any watermark or AI-generated signatures to commit messages.
+
+### Issue Management
+
+When creating new issues:
+1. **Add type labels** to categorize the issue:
+   - `bug` - Something isn't working
+   - `feature` - New feature request
+   - `enhancement` - Improvement to existing feature
+   - `documentation` - Documentation improvements
+   - `refactor` - Code refactoring needed
+   - `test` - Test-related issues
+   - `chore` - Maintenance tasks
+
+2. **Add tag labels** for organization:
+   - `priority:high` / `priority:medium` / `priority:low` - Priority level
+   - `good first issue` - Good for newcomers
+   - `help wanted` - Extra attention needed
+   - Area-specific tags: `ios`, `backend`, `api`, `ci/cd`, etc.
+
+3. **Write clear descriptions**:
+   - For bugs: Include reproduction steps, expected vs actual behavior
+   - For features: Describe the use case and desired outcome
+   - Reference related issues or PRs if applicable
+
+### PR Requirements
+
+1. All tests must pass (`cd backend && go test ./...`)
+2. Feature branches merge to `develop` via PR
+3. Hotfix branches merge to both `main` and `develop`
+4. Releases: `develop` → `main` via PR
+5. If a PR corresponds to an issue, reference the issue number in the PR description to auto-link them (e.g., `#123`)
+6. To auto-close the issue on merge, use closing keywords (e.g., `Fixes #123`, `Closes #123`, or `Resolves #123`)
+
+### Versioning
+
+Semantic versioning: `vMAJOR.MINOR.PATCH`
+- MAJOR: Breaking changes
+- MINOR: New features (backward compatible)
+- PATCH: Bug fixes
+
+### Release Checklist
+
+1. Create `release/vX.Y.Z` branch from develop
+2. Bump version in `ios/project.yml` (`CFBundleShortVersionString` + `CFBundleVersion`)
+3. Update `CHANGELOG.md` with the release notes
+4. Run all tests: `cd backend && go test ./...`
+5. Merge release branch to `main` via PR
+6. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+7. Merge release branch back to `develop`
+8. Archive and upload to TestFlight
+9. Delete release branch
 
 ## Security
 - Never commit `.env` files or API keys
