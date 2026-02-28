@@ -106,14 +106,14 @@ enum APIError: LocalizedError {
     }
 }
 
-actor APIClient {
+actor APIClient: APIClientProtocol {
     static let shared = APIClient()
 
     private let baseURL: String
     private let session: URLSession
     private var historyCache: [String: (data: CampaignHistoryResponse, timestamp: Date)] = [:]
 
-    init(baseURL: String? = nil) {
+    init(baseURL: String? = nil, urlSession: URLSession? = nil) {
         #if DEBUG
         self.baseURL = baseURL ?? "https://api-dev.kickwatch.rescience.com"
         #else
@@ -121,7 +121,7 @@ actor APIClient {
         #endif
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
-        self.session = URLSession(configuration: config)
+        self.session = urlSession ?? URLSession(configuration: config)
     }
 
     func fetchCampaigns(sort: String = "trending", categoryID: String? = nil, cursor: String? = nil) async throws -> CampaignListResponse {
