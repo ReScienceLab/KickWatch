@@ -158,11 +158,11 @@ final class DiscoverViewModelTests: XCTestCase {
 
     func testLoadCategoriesSkipsIfAlreadyLoaded() async {
         vm.categories = [CategoryDTO(id: "1", name: "Art", parent_id: nil)]
-        let initialCallCount = mock.fetchCampaignsCalls.count
+        mock.fetchCategoriesCalled = false
 
         await vm.loadCategories()
 
-        XCTAssertEqual(mock.fetchCampaignsCalls.count, initialCallCount)
+        XCTAssertFalse(mock.fetchCategoriesCalled)
         XCTAssertEqual(vm.categories.count, 1)
     }
 

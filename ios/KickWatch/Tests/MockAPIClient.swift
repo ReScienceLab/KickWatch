@@ -18,6 +18,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     // Call tracking
     var fetchCampaignsCalls: [(sort: String, categoryID: String?, cursor: String?)] = []
     var searchCalls: [(query: String, categoryID: String?, cursor: String?)] = []
+    var fetchCategoriesCalled = false
     var deleteAlertIDs: [String] = []
     var createAlertRequests: [CreateAlertRequest] = []
     var updateAlertRequests: [(id: String, req: UpdateAlertRequest)] = []
@@ -36,6 +37,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func fetchCategories() async throws -> [CategoryDTO] {
+        fetchCategoriesCalled = true
         if let e = shouldThrow { throw e }
         return categoriesResponse
     }
