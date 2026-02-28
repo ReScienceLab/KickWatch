@@ -84,7 +84,7 @@ func (s *CronService) Stop() {
 func (s *CronService) syncCategories() {
 	result := s.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "parent_id"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "name_zh", "parent_id"}),
 	}).Create(&kickstarterCategories)
 	if result.Error != nil {
 		log.Printf("Cron: category sync error: %v", result.Error)

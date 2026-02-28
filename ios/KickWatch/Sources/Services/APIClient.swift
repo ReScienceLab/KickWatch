@@ -39,15 +39,24 @@ struct CampaignDTO: Codable {
 
     // Computed properties for Chinese-first display
     var displayName: String {
-        name_zh ?? name
+        if let zh = name_zh, !zh.isEmpty {
+            return zh
+        }
+        return name
     }
 
     var displayBlurb: String? {
-        blurb_zh ?? blurb
+        if let zh = blurb_zh, !zh.isEmpty {
+            return zh
+        }
+        return blurb
     }
 
     var displayCreatorName: String? {
-        creator_name_zh ?? creator_name
+        if let zh = creator_name_zh, !zh.isEmpty {
+            return zh
+        }
+        return creator_name
     }
 }
 
