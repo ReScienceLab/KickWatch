@@ -160,6 +160,7 @@ func Init(cfg *config.Config) error {
 	//
 	// Note: PR #38 created indexes without deadline predicate. We drop and recreate
 	// to ensure upgraded databases get the improved definitions.
+	// Using partial indexes with WHERE state='live' to reduce index size.
 	if err := DB.Exec(`
 		-- Drop old indexes from PR #38 (missing deadline predicate)
 		DROP INDEX IF EXISTS idx_campaigns_trending;
@@ -167,29 +168,32 @@ func Init(cfg *config.Config) error {
 		DROP INDEX IF EXISTS idx_campaigns_ending;
 		DROP INDEX IF EXISTS idx_campaigns_category_trending;
 		
-		-- Trending: WHERE state='live' AND deadline >= NOW() ORDER BY velocity_24h DESC, percent_funded DESC
+		-- Trending/Hot queries (with and without category filter)
 		CREATE INDEX idx_campaigns_trending 
-		ON campaigns(state, deadline, velocity_24h DESC, percent_funded DESC);
+		ON campaigns(state, deadline, velocity_24h DESC, percent_funded DESC) 
+		WHERE state = 'live';
 		
-		-- Newest: WHERE state='live' AND deadline >= NOW() ORDER BY first_seen_at DESC
-		CREATE INDEX idx_campaigns_newest 
-		ON campaigns(state, deadline, first_seen_at DESC);
-		
-		-- Ending: WHERE state='live' AND deadline >= NOW() ORDER BY deadline ASC
-		CREATE INDEX idx_campaigns_ending 
-		ON campaigns(state, deadline ASC);
-		
-		-- Category+Trending: WHERE state='live' AND deadline >= NOW() AND category_id=? ORDER BY velocity_24h DESC, percent_funded DESC
 		CREATE INDEX idx_campaigns_category_trending 
-		ON campaigns(state, deadline, category_id, velocity_24h DESC, percent_funded DESC);
+		ON campaigns(state, deadline, category_id, velocity_24h DESC, percent_funded DESC) 
+		WHERE state = 'live';
 		
-		-- Category+Newest: WHERE state='live' AND deadline >= NOW() AND category_id=? ORDER BY first_seen_at DESC
+		-- Newest queries (with and without category filter)
+		CREATE INDEX idx_campaigns_newest 
+		ON campaigns(state, deadline, first_seen_at DESC) 
+		WHERE state = 'live';
+		
 		CREATE INDEX IF NOT EXISTS idx_campaigns_category_newest 
-		ON campaigns(state, deadline, category_id, first_seen_at DESC);
+		ON campaigns(state, deadline, category_id, first_seen_at DESC) 
+		WHERE state = 'live';
 		
-		-- Category+Ending: WHERE state='live' AND deadline >= NOW() AND category_id=? ORDER BY deadline ASC
+		-- Ending queries (with and without category filter)
+		CREATE INDEX idx_campaigns_ending 
+		ON campaigns(state, deadline ASC) 
+		WHERE state = 'live';
+		
 		CREATE INDEX IF NOT EXISTS idx_campaigns_category_ending 
-		ON campaigns(state, deadline, category_id);
+		ON campaigns(state, deadline, category_id) 
+		WHERE state = 'live';
 	`).Error; err != nil {
 		return fmt.Errorf("create composite indexes: %w", err)
 	}
