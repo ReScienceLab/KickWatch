@@ -5,6 +5,7 @@ struct DiscoverView: View {
     @State private var vm = DiscoverViewModel()
     @State private var searchText = ""
     @State private var showSearch = false
+    @State private var lastLoadMorePID: String?
 
     private let sortOptions = [("hot", "🔥 Hot"), ("trending", "Trending"), ("newest", "New"), ("ending", "Ending")]
 
@@ -30,23 +31,30 @@ struct DiscoverView: View {
     private var sortPicker: some View {
         Picker("Sort", selection: Binding(
             get: { vm.selectedSort },
-            set: { newSort in Task { await vm.selectSort(newSort) } }
+            set: { newSort in 
+                lastLoadMorePID = nil  // Reset to allow loadMore with new data
+                Task { await vm.selectSort(newSort) } 
+            }
         )) {
             ForEach(sortOptions, id: \.0) { key, label in Text(label).tag(key) }
         }
         .pickerStyle(.segmented)
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .disabled(vm.isLoading && !vm.campaigns.isEmpty)
+        .opacity(vm.isLoading && !vm.campaigns.isEmpty ? 0.6 : 1.0)
     }
 
     private var categoryScroll: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 CategoryChip(title: "All", isSelected: vm.selectedCategoryID == nil) {
+                    lastLoadMorePID = nil  // Reset to allow loadMore with new data
                     Task { await vm.selectCategory(nil) }
                 }
                 ForEach(vm.categories.filter { $0.parent_id == nil }, id: \.id) { cat in
                     CategoryChip(title: cat.name, isSelected: vm.selectedCategoryID == cat.id) {
+                        lastLoadMorePID = nil  // Reset to allow loadMore with new data
                         Task { await vm.selectCategory(cat.id) }
                     }
                 }
@@ -54,6 +62,8 @@ struct DiscoverView: View {
             .padding(.horizontal)
         }
         .padding(.bottom, 4)
+        .disabled(vm.isLoading && !vm.campaigns.isEmpty)
+        .opacity(vm.isLoading && !vm.campaigns.isEmpty ? 0.6 : 1.0)
     }
 
     private var campaignList: some View {
@@ -63,23 +73,35 @@ struct DiscoverView: View {
             } else if let err = vm.error {
                 Text(err).foregroundStyle(.secondary).padding()
             } else {
-                List {
-                    ForEach(vm.campaigns, id: \.pid) { campaign in
-                        NavigationLink(destination: CampaignDetailView(campaign: campaign)) {
-                            CampaignRowView(campaign: campaign)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
-                        .onAppear {
-                            if campaign.pid == vm.campaigns.last?.pid {
-                                Task { await vm.loadMore() }
+                ZStack {
+                    List {
+                        ForEach(vm.campaigns, id: \.pid) { campaign in
+                            NavigationLink(destination: CampaignDetailView(campaign: campaign)) {
+                                CampaignRowView(campaign: campaign)
+                            }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+                            .onAppear {
+                                if campaign.pid == vm.campaigns.last?.pid, 
+                                   lastLoadMorePID != campaign.pid {
+                                    lastLoadMorePID = campaign.pid
+                                    Task { await vm.loadMore() }
+                                }
                             }
                         }
+                        if vm.isLoadingMore {
+                            ProgressView().frame(maxWidth: .infinity)
+                        }
                     }
-                    if vm.isLoadingMore {
-                        ProgressView().frame(maxWidth: .infinity)
+                    .listStyle(.plain)
+                    .opacity(vm.isLoading && !vm.campaigns.isEmpty ? 0.3 : 1.0)
+                    
+                    if vm.isLoading && !vm.campaigns.isEmpty {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(uiColor: .systemBackground).opacity(0.5))
                     }
                 }
-                .listStyle(.plain)
             }
         }
     }

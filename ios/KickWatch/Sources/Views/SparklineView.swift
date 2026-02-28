@@ -2,74 +2,61 @@ import SwiftUI
 import Charts
 
 struct SparklineView: View {
-    let pid: String
+    let dataPoints: [HistoryDataPoint]
+    let height: CGFloat = 60
 
-    @State private var snapshots: [CampaignSnapshotDTO] = []
-    @State private var isLoading = true
-
-    private static let dateFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withFullDate]
-        return f
-    }()
+    private var trendColor: Color {
+        guard dataPoints.count >= 2 else { return .gray }
+        let first = dataPoints.first?.pledged_amount ?? 0
+        let last = dataPoints.last?.pledged_amount ?? 0
+        if last > first * 1.05 { return .green }
+        if last < first * 0.95 { return .red }
+        return .gray
+    }
 
     var body: some View {
-        Group {
-            if snapshots.count >= 2 {
-                chart
-            } else if isLoading {
-                Color.clear
-            } else {
-                Color.clear
-            }
+        if dataPoints.isEmpty {
+            emptyState
+        } else {
+            chart
         }
-        .frame(width: 64, height: 28)
-        .task(id: pid) {
-            isLoading = true
-            snapshots = (try? await APIClient.shared.fetchCampaignHistory(pid: pid)) ?? []
-            isLoading = false
+    }
+
+    private var emptyState: some View {
+        HStack {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: 24))
+                .foregroundStyle(.secondary)
+            Text("No trend data yet")
+                .font(.caption).foregroundStyle(.secondary)
         }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
     }
 
     private var chart: some View {
-        Chart(indexedSnapshots, id: \.index) { item in
-            LineMark(
-                x: .value("Day", item.index),
-                y: .value("Pledged", item.snapshot.pledged_amount)
-            )
-            .foregroundStyle(lineColor)
-            .lineStyle(StrokeStyle(lineWidth: 1.5))
-
+        Chart(dataPoints) { point in
             AreaMark(
-                x: .value("Day", item.index),
-                yStart: .value("Base", minValue),
-                yEnd: .value("Pledged", item.snapshot.pledged_amount)
+                x: .value("Date", point.date ?? Date()),
+                y: .value("Pledged", point.pledged_amount)
             )
-            .foregroundStyle(lineColor.opacity(0.15))
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [trendColor.opacity(0.3), trendColor.opacity(0.05)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+
+            LineMark(
+                x: .value("Date", point.date ?? Date()),
+                y: .value("Pledged", point.pledged_amount)
+            )
+            .foregroundStyle(trendColor)
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
         }
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
-        .chartXScale(domain: 0...(indexedSnapshots.count - 1))
-        .chartYScale(domain: minValue...maxValue)
-    }
-
-    private var indexedSnapshots: [(index: Int, snapshot: CampaignSnapshotDTO)] {
-        snapshots.enumerated().map { (index: $0.offset, snapshot: $0.element) }
-    }
-
-    private var minValue: Double {
-        (snapshots.map(\.pledged_amount).min() ?? 0) * 0.95
-    }
-
-    private var maxValue: Double {
-        let max = snapshots.map(\.pledged_amount).max() ?? 1
-        return max * 1.05
-    }
-
-    private var lineColor: Color {
-        guard snapshots.count >= 2 else { return .accentColor }
-        let first = snapshots.first!.pledged_amount
-        let last = snapshots.last!.pledged_amount
-        return last >= first ? Color.green : Color.orange
+        .frame(height: height)
     }
 }

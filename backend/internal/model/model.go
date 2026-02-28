@@ -15,24 +15,24 @@ type Campaign struct {
 	GoalAmount    float64   `json:"goal_amount"`
 	GoalCurrency  string    `json:"goal_currency"`
 	PledgedAmount float64   `json:"pledged_amount"`
-	Deadline      time.Time `json:"deadline"`
-	State         string    `json:"state"`
-	CategoryID    string    `json:"category_id"`
+	Deadline      time.Time `gorm:"index:idx_deadline" json:"deadline"`
+	State         string    `gorm:"index:idx_state" json:"state"`
+	CategoryID    string    `gorm:"index:idx_category_id" json:"category_id"`
 	CategoryName  string    `json:"category_name"`
 	ProjectURL    string    `json:"project_url"`
 	CreatorName   string    `json:"creator_name"`
 	PercentFunded float64   `json:"percent_funded"`
 	BackersCount  int       `gorm:"default:0" json:"backers_count"`
 	Slug          string    `json:"slug"`
-	Velocity24h   float64   `gorm:"default:0" json:"velocity_24h"`
+	Velocity24h   float64   `gorm:"default:0;index:idx_velocity" json:"velocity_24h"`
 	PleDelta24h   float64   `gorm:"default:0" json:"pledge_delta_24h"`
-	FirstSeenAt   time.Time `gorm:"not null;default:now()" json:"first_seen_at"`
+	FirstSeenAt   time.Time `gorm:"not null;default:now();index:idx_first_seen" json:"first_seen_at"`
 	LastUpdatedAt time.Time `gorm:"not null;default:now()" json:"last_updated_at"`
 }
 
 type CampaignSnapshot struct {
 	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	CampaignPID string    `gorm:"not null;uniqueIndex:idx_campaign_snapshot_date" json:"campaign_pid"`
+	CampaignPID string    `gorm:"column:campaign_pid;not null;uniqueIndex:idx_campaign_snapshot_date" json:"campaign_pid"`
 	// SnapshotDate is the UTC calendar day; one row per (campaign, day).
 	SnapshotDate  time.Time `gorm:"type:date;not null;uniqueIndex:idx_campaign_snapshot_date" json:"snapshot_date"`
 	PledgedAmount float64   `json:"pledged_amount"`

@@ -53,8 +53,10 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 
 	log.Printf("Search: found %d campaigns for term=%q page=%d", len(campaigns), term, page)
 
+	// Kickstarter returns 12 campaigns per page (fixed page size).
+	// If we got a full page (12 items), assume there's a next page.
 	nextCursor := ""
-	hasNextPage := len(campaigns) >= first
+	hasNextPage := len(campaigns) >= 12
 	if hasNextPage {
 		nextCursor = fmt.Sprintf("page:%d", page+1)
 	}
@@ -84,6 +86,9 @@ func (s *KickstarterScrapingService) DiscoverCampaigns(categoryID string, sort s
 		return nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
+	if len(campaigns) == 0 && len(html) > 50_000 {
+		log.Printf("DiscoverCampaigns: 0 campaigns from %d-byte page (cat=%s page=%d) — possible HTML structure change", len(html), categoryID, page)
+	}
 	log.Printf("Discovered %d campaigns for category %s (page %d)", len(campaigns), categoryID, page)
 
 	return campaigns, nil

@@ -34,3 +34,15 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  KickWatchTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: KickWatch/Tests
+    dependencies:
+      - target: KickWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rescience.kickwatch.tests
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        GENERATE_INFOPLIST_FILE: YES

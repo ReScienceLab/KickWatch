@@ -5,6 +5,7 @@ struct SearchView: View {
     @State private var query = ""
     @State private var results: [CampaignDTO] = []
     @State private var isLoading = false
+    @State private var isLoadingMore = false
     @State private var nextCursor: String?
     @State private var hasMore = false
     @Environment(\.modelContext) private var modelContext
@@ -22,8 +23,11 @@ struct SearchView: View {
                         }
                         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
                     }
-                    if hasMore {
+                    if isLoadingMore {
                         ProgressView().frame(maxWidth: .infinity)
+                    } else if hasMore {
+                        Color.clear
+                            .frame(height: 1)
                             .task { await loadMore() }
                     }
                 }
@@ -41,6 +45,7 @@ struct SearchView: View {
     private func search() async {
         guard !query.isEmpty else { return }
         isLoading = true
+        isLoadingMore = false  // Cancel any ongoing loadMore
         do {
             let resp = try await APIClient.shared.searchCampaigns(query: query)
             results = resp.campaigns
@@ -53,16 +58,21 @@ struct SearchView: View {
     }
 
     private func loadMore() async {
-        guard let cursor = nextCursor, !isLoading else { return }
-        isLoading = true
+        guard !isLoading, !isLoadingMore, let cursor = nextCursor else { return }
+        isLoadingMore = true
         do {
             let resp = try await APIClient.shared.searchCampaigns(query: query, cursor: cursor)
-            results.append(contentsOf: resp.campaigns)
+            
+            // Deduplicate by PID before appending
+            let existingPIDs = Set(results.map(\.pid))
+            let newResults = resp.campaigns.filter { !existingPIDs.contains($0.pid) }
+            
+            results.append(contentsOf: newResults)
             nextCursor = resp.next_cursor
             hasMore = resp.next_cursor != nil
         } catch {
             print("SearchView loadMore: \(error)")
         }
-        isLoading = false
+        isLoadingMore = false
     }
 }

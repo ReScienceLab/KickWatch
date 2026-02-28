@@ -1,5 +1,18 @@
 import Foundation
 
+protocol APIClientProtocol: Sendable {
+    func fetchCampaigns(sort: String, categoryID: String?, cursor: String?) async throws -> CampaignListResponse
+    func searchCampaigns(query: String, categoryID: String?, cursor: String?) async throws -> SearchResponse
+    func fetchCategories() async throws -> [CategoryDTO]
+    func registerDevice(token: String) async throws -> RegisterDeviceResponse
+    func fetchAlerts(deviceID: String) async throws -> [AlertDTO]
+    func createAlert(_ req: CreateAlertRequest) async throws -> AlertDTO
+    func updateAlert(id: String, req: UpdateAlertRequest) async throws -> AlertDTO
+    func deleteAlert(id: String) async throws
+    func fetchAlertMatches(alertID: String) async throws -> [CampaignDTO]
+    func fetchCampaignHistory(pid: String, days: Int) async throws -> CampaignHistoryResponse
+}
+
 struct CampaignDTO: Codable {
     let pid: String
     let name: String
@@ -15,6 +28,7 @@ struct CampaignDTO: Codable {
     let project_url: String?
     let creator_name: String?
     let percent_funded: Double?
+    let backers_count: Int?
     let slug: String?
     let velocity_24h: Double?
     let pledge_delta_24h: Double?
@@ -38,12 +52,20 @@ struct SearchResponse: Codable {
     let next_cursor: String?
 }
 
-struct CampaignSnapshotDTO: Codable {
+struct HistoryDataPoint: Codable, Identifiable {
+    let id: String
     let campaign_pid: String
-    let snapshot_date: String
     let pledged_amount: Double
     let percent_funded: Double
-    let backers_count: Int?
+    let snapshot_at: String
+
+    var date: Date? {
+        ISO8601DateFormatter().date(from: snapshot_at)
+    }
+}
+
+struct CampaignHistoryResponse: Codable {
+    let history: [HistoryDataPoint]
 }
 
 struct RegisterDeviceRequest: Codable {
@@ -97,17 +119,14 @@ enum APIError: LocalizedError {
     }
 }
 
-actor APIClient {
+actor APIClient: APIClientProtocol {
     static let shared = APIClient()
 
     private let baseURL: String
     private let session: URLSession
+    private var historyCache: [String: (data: CampaignHistoryResponse, timestamp: Date)] = [:]
 
-    // History cache: pid → (snapshots, fetchedAt). Actor isolation makes this thread-safe.
-    private var historyCache: [String: (data: [CampaignSnapshotDTO], fetchedAt: Date)] = [:]
-    private let historyCacheTTL: TimeInterval = 300 // 5 minutes
-
-    init(baseURL: String? = nil) {
+    init(baseURL: String? = nil, urlSession: URLSession? = nil) {
         #if DEBUG
         self.baseURL = baseURL ?? "https://api-dev.kickwatch.rescience.com"
         #else
@@ -115,7 +134,7 @@ actor APIClient {
         #endif
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
-        self.session = URLSession(configuration: config)
+        self.session = urlSession ?? URLSession(configuration: config)
     }
 
     func fetchCampaigns(sort: String = "trending", categoryID: String? = nil, cursor: String? = nil) async throws -> CampaignListResponse {
@@ -167,18 +186,23 @@ actor APIClient {
         }
     }
 
-    func fetchCampaignHistory(pid: String) async throws -> [CampaignSnapshotDTO] {
-        if let cached = historyCache[pid], Date().timeIntervalSince(cached.fetchedAt) < historyCacheTTL {
-            return cached.data
-        }
-        let result: [CampaignSnapshotDTO] = try await get(url: URL(string: baseURL + "/api/campaigns/\(pid)/history")!)
-        historyCache[pid] = (data: result, fetchedAt: Date())
-        return result
-    }
-
     func fetchAlertMatches(alertID: String) async throws -> [CampaignDTO] {
         let url = URL(string: baseURL + "/api/alerts/\(alertID)/matches")!
         return try await get(url: url)
+    }
+
+    func fetchCampaignHistory(pid: String, days: Int = 14) async throws -> CampaignHistoryResponse {
+        if let cached = historyCache[pid],
+           Date().timeIntervalSince(cached.timestamp) < 300 {
+            return cached.data
+        }
+
+        var components = URLComponents(string: baseURL + "/api/campaigns/\(pid)/history")!
+        components.queryItems = [URLQueryItem(name: "days", value: String(days))]
+
+        let response: CampaignHistoryResponse = try await get(url: components.url!)
+        historyCache[pid] = (response, Date())
+        return response
     }
 
     private func get<R: Decodable>(url: URL) async throws -> R {
