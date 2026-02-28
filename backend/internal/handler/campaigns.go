@@ -139,6 +139,7 @@ func GetCampaign(c *gin.Context) {
 		return
 	}
 	var campaign model.Campaign
+	// No deadline filter - allow viewing ended campaigns (e.g., from bookmarks/history)
 	if err := db.DB.First(&campaign, "pid = ?", pid).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "campaign not found"})
 		return
