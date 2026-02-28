@@ -328,7 +328,7 @@ struct ExpandableBlurbView: View {
                             .font(.system(size: 10))
                     }
                     .font(.caption).fontWeight(.medium)
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(Color.accentColor)
                 }
             }
         }

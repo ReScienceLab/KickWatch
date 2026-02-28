@@ -11,6 +11,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var updateAlertResult: AlertDTO = MockAPIClient.makeAlertDTO()
     var alertMatchesResult: [CampaignDTO] = []
     var registerDeviceResult = RegisterDeviceResponse(device_id: "mock-device-id")
+    var campaignHistoryResult = CampaignHistoryResponse(history: [])
 
     // Error stub
     var shouldThrow: Error?
@@ -75,6 +76,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return alertMatchesResult
     }
 
+    func fetchCampaignHistory(pid: String, days: Int) async throws -> CampaignHistoryResponse {
+        if let e = shouldThrow { throw e }
+        return campaignHistoryResult
+    }
+
     // MARK: - Factories
 
     static func makeAlertDTO(id: String = "alert-1", isEnabled: Bool = true) -> AlertDTO {
@@ -108,6 +114,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             project_url: nil,
             creator_name: nil,
             percent_funded: 50,
+            backers_count: 42,
             slug: nil,
             velocity_24h: nil,
             pledge_delta_24h: nil,
