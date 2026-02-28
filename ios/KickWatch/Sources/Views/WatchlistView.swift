@@ -47,12 +47,12 @@ struct WatchlistView: View {
 
     private func toCampaignDTO(_ c: Campaign) -> CampaignDTO {
         CampaignDTO(
-            pid: c.pid, name: c.name, blurb: c.blurb, photo_url: c.photoURL,
-            goal_amount: c.goalAmount, goal_currency: c.goalCurrency,
+            pid: c.pid, name: c.name, name_zh: nil, blurb: c.blurb, blurb_zh: nil,
+            photo_url: c.photoURL, goal_amount: c.goalAmount, goal_currency: c.goalCurrency,
             pledged_amount: c.pledgedAmount,
             deadline: ISO8601DateFormatter().string(from: c.deadline),
             state: c.state, category_name: c.categoryName, category_id: c.categoryID,
-            project_url: c.projectURL, creator_name: c.creatorName,
+            project_url: c.projectURL, creator_name: c.creatorName, creator_name_zh: nil,
             percent_funded: c.percentFunded, backers_count: nil, slug: nil,
             velocity_24h: nil, pledge_delta_24h: nil, first_seen_at: nil
         )

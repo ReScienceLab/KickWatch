@@ -16,7 +16,9 @@ protocol APIClientProtocol: Sendable {
 struct CampaignDTO: Codable {
     let pid: String
     let name: String
+    let name_zh: String?
     let blurb: String?
+    let blurb_zh: String?
     let photo_url: String?
     let goal_amount: Double?
     let goal_currency: String?
@@ -27,18 +29,37 @@ struct CampaignDTO: Codable {
     let category_id: String?
     let project_url: String?
     let creator_name: String?
+    let creator_name_zh: String?
     let percent_funded: Double?
     let backers_count: Int?
     let slug: String?
     let velocity_24h: Double?
     let pledge_delta_24h: Double?
     let first_seen_at: String?
+
+    // Computed properties for Chinese-first display
+    var displayName: String {
+        name_zh ?? name
+    }
+
+    var displayBlurb: String? {
+        blurb_zh ?? blurb
+    }
+
+    var displayCreatorName: String? {
+        creator_name_zh ?? creator_name
+    }
 }
 
 struct CategoryDTO: Codable {
     let id: String
     let name: String
+    let name_zh: String?
     let parent_id: String?
+
+    var displayName: String {
+        name_zh ?? name
+    }
 }
 
 struct CampaignListResponse: Codable {

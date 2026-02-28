@@ -53,7 +53,7 @@ struct DiscoverView: View {
                     Task { await vm.selectCategory(nil) }
                 }
                 ForEach(vm.categories.filter { $0.parent_id == nil }, id: \.id) { cat in
-                    CategoryChip(title: cat.name, isSelected: vm.selectedCategoryID == cat.id) {
+                    CategoryChip(title: cat.displayName, isSelected: vm.selectedCategoryID == cat.id) {
                         lastLoadMorePID = nil  // Reset to allow loadMore with new data
                         Task { await vm.selectCategory(cat.id) }
                     }
