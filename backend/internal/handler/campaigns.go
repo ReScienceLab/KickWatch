@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kickwatch/backend/internal/db"
@@ -27,8 +28,12 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
-		// All client requests now served from DB to save ScrapingBee credits
-		if db.IsEnabled() {
+		// Serve trending/hot/ending from DB, but NOT newest
+		// - trending/hot: velocity_24h is computed from snapshots (semantically correct)
+		// - ending: deadline is from Kickstarter (semantically correct)
+		// - newest: first_seen_at is our crawl time, NOT Kickstarter's launch time
+		//   → newest must use ScrapingBee to maintain semantic correctness
+		if db.IsEnabled() && sort != "newest" {
 			offset := 0
 			if cursor != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
@@ -37,14 +42,15 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			}
 
 			var campaigns []model.Campaign
-			q := db.DB.Where("state = 'live'").Offset(offset).Limit(limit + 1)
+			// Filter: state='live' AND deadline >= NOW() to exclude expired campaigns
+			// Cron only upserts campaigns from discover pages (which only show live ones),
+			// but never marks rows as ended when they disappear/expire.
+			q := db.DB.Where("state = 'live' AND deadline >= ?", time.Now()).Offset(offset).Limit(limit + 1)
 			
 			// Map sort to DB columns
 			switch sort {
 			case "trending", "hot":
 				q = q.Order("velocity_24h DESC, percent_funded DESC")
-			case "newest":
-				q = q.Order("first_seen_at DESC")
 			case "ending":
 				q = q.Order("deadline ASC")
 			default:
@@ -73,7 +79,9 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			// If DB query fails, fall through to ScrapingBee fallback
 		}
 
-		// Fallback to ScrapingBee only if DB unavailable (should rarely happen)
+		// Use ScrapingBee for:
+		// - sort=newest (needs real launch date, not first_seen_at)
+		// - DB unavailable (fallback)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
 			gqlSort = "MAGIC"
