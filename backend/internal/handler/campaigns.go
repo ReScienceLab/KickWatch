@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/base64"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -36,10 +38,22 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 		// - hot: velocity_24h (our metric)
 		// - ending: deadline (exact from Kickstarter)
 		if db.IsEnabled() {
+			// Detect cursor source: ScrapingBee uses "page:N", DB uses base64 offsets
+			// If cursor is from ScrapingBee, fall through to ScrapingBee to maintain format
+			if cursor != "" && strings.HasPrefix(cursor, "page:") {
+				// ScrapingBee cursor format detected - fall through to ScrapingBee path
+				// to avoid format mismatch (cannot mix base64 offsets with page numbers)
+				goto useScrapingBee
+			}
+
 			offset := 0
 			if cursor != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
 					offset, _ = strconv.Atoi(string(decoded))
+				} else {
+					// Invalid cursor format - treat as offset 0 but log warning
+					// This shouldn't happen if client respects cursor format
+					log.Printf("ListCampaigns: invalid cursor format %q, treating as offset 0", cursor)
 				}
 			}
 
@@ -66,11 +80,10 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			}
 			
 			// Return DB results if we have data
-			// Note: Once DB is seeded, always use DB to avoid cursor format conflicts
-			// (DB uses base64 offsets, ScrapingBee uses page:N format)
+			// Note: Once using DB cursors, always use DB to maintain cursor format consistency
 			if err := q.Find(&campaigns).Error; err == nil {
-				// Even if empty, return DB results if we're paginating (cursor != "")
-				// This prevents cursor format cycling between DB and ScrapingBee
+				// Return DB results if we have data, OR if we're paginating with a DB cursor
+				// (cursor != "" and not a ScrapingBee cursor means it's a DB cursor)
 				if len(campaigns) > 0 || cursor != "" {
 					hasMore := len(campaigns) > limit
 					if hasMore {
@@ -91,8 +104,10 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			// Only fall through to ScrapingBee on first load (cursor == "") and DB empty/failed
 		}
 
-		// ScrapingBee fallback only for:
+	useScrapingBee:
+		// ScrapingBee fallback for:
 		// - First load (cursor == "") when DB is unavailable or empty (cold start)
+		// - ScrapingBee pagination (cursor starts with "page:")
 		// - SearchCampaigns endpoint (user search with query text)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
