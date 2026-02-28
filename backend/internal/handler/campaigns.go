@@ -28,12 +28,13 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
-		// Serve trending/hot/ending from DB, but NOT newest
-		// - trending/hot: velocity_24h is computed from snapshots (semantically correct)
+		// Serve hot/ending from DB, but NOT trending/newest
+		// - hot: velocity_24h is computed from snapshots (our metric)
 		// - ending: deadline is from Kickstarter (semantically correct)
+		// - trending: needs ScrapingBee MAGIC (Kickstarter's algorithm)
 		// - newest: first_seen_at is our crawl time, NOT Kickstarter's launch time
-		//   → newest must use ScrapingBee to maintain semantic correctness
-		if db.IsEnabled() && sort != "newest" {
+		//   → trending/newest must use ScrapingBee to maintain semantic correctness
+		if db.IsEnabled() && (sort == "hot" || sort == "ending") {
 			offset := 0
 			if cursor != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
@@ -49,19 +50,18 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			
 			// Map sort to DB columns
 			switch sort {
-			case "trending", "hot":
+			case "hot":
 				q = q.Order("velocity_24h DESC, percent_funded DESC")
 			case "ending":
 				q = q.Order("deadline ASC")
-			default:
-				q = q.Order("velocity_24h DESC, percent_funded DESC")
 			}
 			
 			if categoryID != "" {
 				q = q.Where("category_id = ?", categoryID)
 			}
 			
-			if err := q.Find(&campaigns).Error; err == nil {
+			// Only return DB results if we have data; otherwise fall through to ScrapingBee
+			if err := q.Find(&campaigns).Error; err == nil && len(campaigns) > 0 {
 				hasMore := len(campaigns) > limit
 				if hasMore {
 					campaigns = campaigns[:limit]
@@ -73,15 +73,17 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 					nextCursor = base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(nextOffset)))
 				}
 				
-				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor, "total": len(campaigns)})
+				// Don't include total for DB queries (we don't track global count)
+				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor})
 				return
 			}
-			// If DB query fails, fall through to ScrapingBee fallback
+			// If DB query fails or returns empty, fall through to ScrapingBee fallback
 		}
 
 		// Use ScrapingBee for:
+		// - sort=trending (needs Kickstarter's MAGIC algorithm)
 		// - sort=newest (needs real launch date, not first_seen_at)
-		// - DB unavailable (fallback)
+		// - DB unavailable or empty (fallback)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
 			gqlSort = "MAGIC"
