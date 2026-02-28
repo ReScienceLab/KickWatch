@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "archive": {
+      "source": "ReScienceLab/opc-skills",
+      "sourceType": "github",
+      "computedHash": "cda5dd9a6b269e4921047c6b6b1cf7edb658db34af51db60dedfeee63093a33a"
+    },
     "logo-creator": {
       "source": "ReScienceLab/opc-skills",
       "sourceType": "github",
