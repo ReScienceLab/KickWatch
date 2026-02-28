@@ -170,15 +170,16 @@ func Init(cfg *config.Config) error {
 					ALTER TABLE campaign_snapshots ADD COLUMN backers_count int DEFAULT 0;
 				END IF;
 
-				-- Deduplicate: keep only the latest snapshot per (campaign_pid, snapshot_date).
-				DELETE FROM campaign_snapshots a USING campaign_snapshots b
-				WHERE a.campaign_pid = b.campaign_pid
-				  AND a.snapshot_date = b.snapshot_date
-				  AND a.snapshot_at < b.snapshot_at;
-
 				-- Set NOT NULL now that all rows have a value.
 				ALTER TABLE campaign_snapshots ALTER COLUMN snapshot_date SET NOT NULL;
 			END IF;
+
+			-- Deduplicate: keep only the latest snapshot per (campaign_pid, snapshot_date).
+			-- Run this EVERY time (not just when column is missing) to handle legacy duplicate data.
+			DELETE FROM campaign_snapshots a USING campaign_snapshots b
+			WHERE a.campaign_pid = b.campaign_pid
+			  AND a.snapshot_date = b.snapshot_date
+			  AND a.snapshot_at < b.snapshot_at;
 		END
 		$$;
 	`).Error; err != nil {
