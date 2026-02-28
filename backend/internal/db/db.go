@@ -160,6 +160,7 @@ func Init(cfg *config.Config) error {
 				) THEN
 					ALTER TABLE campaign_snapshots ADD COLUMN snapshot_date date;
 					UPDATE campaign_snapshots SET snapshot_date = DATE(snapshot_at);
+					ALTER TABLE campaign_snapshots ALTER COLUMN snapshot_date SET NOT NULL;
 				END IF;
 
 				-- Add backers_count if missing (added alongside snapshot_date).
@@ -169,21 +170,23 @@ func Init(cfg *config.Config) error {
 				) THEN
 					ALTER TABLE campaign_snapshots ADD COLUMN backers_count int DEFAULT 0;
 				END IF;
-
-				-- Set NOT NULL now that all rows have a value.
-				ALTER TABLE campaign_snapshots ALTER COLUMN snapshot_date SET NOT NULL;
 			END IF;
-
-			-- Deduplicate: keep only the latest snapshot per (campaign_pid, snapshot_date).
-			-- Run this EVERY time (not just when column is missing) to handle legacy duplicate data.
-			DELETE FROM campaign_snapshots a USING campaign_snapshots b
-			WHERE a.campaign_pid = b.campaign_pid
-			  AND a.snapshot_date = b.snapshot_date
-			  AND a.snapshot_at < b.snapshot_at;
 		END
 		$$;
 	`).Error; err != nil {
-		return fmt.Errorf("pre-migrate campaign_snapshots: %w", err)
+		return fmt.Errorf("pre-migrate campaign_snapshots columns: %w", err)
+	}
+
+	// Deduplicate snapshots: keep only the latest per (campaign_pid, snapshot_date).
+	// Run this EVERY time to handle legacy duplicate data from buggy upsert logic.
+	// Must run BEFORE AutoMigrate attempts to create the unique index.
+	if err := DB.Exec(`
+		DELETE FROM campaign_snapshots a USING campaign_snapshots b
+		WHERE a.campaign_pid = b.campaign_pid
+		  AND a.snapshot_date = b.snapshot_date
+		  AND a.snapshot_at < b.snapshot_at
+	`).Error; err != nil {
+		return fmt.Errorf("deduplicate campaign_snapshots: %w", err)
 	}
 
 	// NOW run AutoMigrate after all column renames are complete
