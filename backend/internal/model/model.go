@@ -10,7 +10,9 @@ import (
 type Campaign struct {
 	PID           string    `gorm:"column:pid;primaryKey" json:"pid"`
 	Name          string    `gorm:"not null" json:"name"`
+	NameZh        string    `json:"name_zh"`
 	Blurb         string    `json:"blurb"`
+	BlurbZh       string    `json:"blurb_zh"`
 	PhotoURL      string    `json:"photo_url"`
 	GoalAmount    float64   `json:"goal_amount"`
 	GoalCurrency  string    `json:"goal_currency"`
@@ -21,6 +23,7 @@ type Campaign struct {
 	CategoryName  string    `json:"category_name"`
 	ProjectURL    string    `json:"project_url"`
 	CreatorName   string    `json:"creator_name"`
+	CreatorNameZh string    `json:"creator_name_zh"`
 	PercentFunded float64   `json:"percent_funded"`
 	BackersCount  int       `gorm:"default:0" json:"backers_count"`
 	Slug          string    `json:"slug"`
@@ -51,6 +54,7 @@ func (s *CampaignSnapshot) BeforeCreate(tx *gorm.DB) error {
 type Category struct {
 	ID       string `gorm:"primaryKey" json:"id"`
 	Name     string `gorm:"not null" json:"name"`
+	NameZh   string `json:"name_zh"`
 	ParentID string `json:"parent_id,omitempty"`
 }
 
