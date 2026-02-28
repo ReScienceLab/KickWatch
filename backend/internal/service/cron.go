@@ -233,18 +233,32 @@ func (s *CronService) RunBackfill() error {
 }
 
 func (s *CronService) storeSnapshots(campaigns []model.Campaign) {
+	now := time.Now().UTC()
+	// Truncate to midnight UTC — one row per (campaign, calendar day).
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
 	snapshots := make([]model.CampaignSnapshot, 0, len(campaigns))
-	now := time.Now()
 	for _, c := range campaigns {
 		snapshots = append(snapshots, model.CampaignSnapshot{
 			CampaignPID:   c.PID,
+			SnapshotDate:  today,
 			PledgedAmount: c.PledgedAmount,
 			PercentFunded: c.PercentFunded,
+			BackersCount:  c.BackersCount,
 			SnapshotAt:    now,
 		})
 	}
-	if err := s.db.Create(&snapshots).Error; err != nil {
-		log.Printf("Cron: snapshot insert error: %v", err)
+	// ON CONFLICT (campaign_pid, snapshot_date): update to latest values from this crawl.
+	result := s.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "campaign_pid"}, {Name: "snapshot_date"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"pledged_amount", "percent_funded", "backers_count", "snapshot_at",
+		}),
+	}).Create(&snapshots)
+	if result.Error != nil {
+		log.Printf("Cron: snapshot upsert error: %v", result.Error)
+	} else {
+		log.Printf("Cron: upserted %d snapshots for %s", len(snapshots), today.Format("2006-01-02"))
 	}
 }
 

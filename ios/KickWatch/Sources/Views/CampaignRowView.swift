@@ -13,8 +13,12 @@ struct CampaignRowView: View {
         HStack(spacing: 12) {
             thumbnail
             info
-            Spacer()
-            watchButton
+            Spacer(minLength: 4)
+            VStack(spacing: 6) {
+                SparklineView(pid: campaign.pid)
+                watchButton
+            }
+            .padding(.trailing, 16)
         }
         .padding(.vertical, 10)
         .padding(.leading, 16)
@@ -151,6 +155,7 @@ struct CampaignRowView: View {
             toggleWatch()
         } label: {
             Image(systemName: isWatched ? "heart.fill" : "heart")
+                .font(.system(size: 14))
                 .foregroundStyle(isWatched ? .red : .secondary)
         }
         .buttonStyle(.plain)
