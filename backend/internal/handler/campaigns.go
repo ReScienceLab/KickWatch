@@ -28,8 +28,13 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
-		// "hot" sort: served from DB by velocity_24h with offset-based pagination
-		if sort == "hot" && db.IsEnabled() {
+		// Serve ALL sorts from DB for client requests (zero ScrapingBee credits)
+		// Trade-offs for cost optimization:
+		// - trending: velocity_24h approximates Kickstarter's MAGIC (not exact but close)
+		// - newest: first_seen_at = crawl time, not launch time (daily crawl minimizes drift)
+		// - hot: velocity_24h (our metric)
+		// - ending: deadline (exact from Kickstarter)
+		if db.IsEnabled() {
 			offset := 0
 			if cursor != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
@@ -38,12 +43,29 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			}
 
 			var campaigns []model.Campaign
-			q := db.DB.Where("state = 'live'").Order("velocity_24h DESC").Offset(offset).Limit(limit + 1)
+			// Filter: state='live' AND deadline >= NOW() to exclude expired campaigns
+			// Cron only upserts campaigns from discover pages (which only show live ones),
+			// but never marks rows as ended when they disappear/expire.
+			q := db.DB.Where("state = 'live' AND deadline >= ?", time.Now()).Offset(offset).Limit(limit + 1)
+			
+			// Map sort to DB columns
+			switch sort {
+			case "trending", "hot":
+				q = q.Order("velocity_24h DESC, percent_funded DESC")
+			case "newest":
+				q = q.Order("first_seen_at DESC")
+			case "ending":
+				q = q.Order("deadline ASC")
+			default:
+				q = q.Order("velocity_24h DESC, percent_funded DESC")
+			}
+			
 			if categoryID != "" {
 				q = q.Where("category_id = ?", categoryID)
 			}
 			
-			if err := q.Find(&campaigns).Error; err == nil {
+			// Only return DB results if we have data; otherwise fall through to ScrapingBee
+			if err := q.Find(&campaigns).Error; err == nil && len(campaigns) > 0 {
 				hasMore := len(campaigns) > limit
 				if hasMore {
 					campaigns = campaigns[:limit]
@@ -55,11 +77,16 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 					nextCursor = base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(nextOffset)))
 				}
 				
-				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor, "total": len(campaigns)})
+				// Don't include total for DB queries (we don't track global count)
+				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor})
 				return
 			}
+			// If DB query fails or returns empty, fall through to ScrapingBee fallback
 		}
 
+		// ScrapingBee fallback only for:
+		// - DB unavailable or empty (cold start, failed query)
+		// - SearchCampaigns endpoint (user search with query text)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
 			gqlSort = "MAGIC"
@@ -67,19 +94,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 
 		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
 		if err != nil {
-			// fallback to DB if GraphQL fails
-			if db.IsEnabled() {
-				var campaigns []model.Campaign
-				q := db.DB.Where("state = 'live'").Order("last_updated_at DESC").Limit(limit)
-				if categoryID != "" {
-					q = q.Where("category_id = ?", categoryID)
-				}
-				if dbErr := q.Find(&campaigns).Error; dbErr == nil && len(campaigns) > 0 {
-					c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nil, "total": len(campaigns)})
-					return
-				}
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database and API unavailable"})
 			return
 		}
 
@@ -129,6 +144,7 @@ func GetCampaign(c *gin.Context) {
 		return
 	}
 	var campaign model.Campaign
+	// No deadline filter - allow viewing ended campaigns (e.g., from bookmarks/history)
 	if err := db.DB.First(&campaign, "pid = ?", pid).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "campaign not found"})
 		return

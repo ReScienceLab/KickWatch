@@ -154,6 +154,24 @@ func Init(cfg *config.Config) error {
 		return fmt.Errorf("automigrate: %w", err)
 	}
 
+	// Create composite indexes for optimal query performance
+	// These support the common query patterns: WHERE state='live' ORDER BY ...
+	if err := DB.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_campaigns_trending 
+		ON campaigns(state, velocity_24h DESC, percent_funded DESC);
+		
+		CREATE INDEX IF NOT EXISTS idx_campaigns_newest 
+		ON campaigns(state, first_seen_at DESC);
+		
+		CREATE INDEX IF NOT EXISTS idx_campaigns_ending 
+		ON campaigns(state, deadline ASC);
+		
+		CREATE INDEX IF NOT EXISTS idx_campaigns_category_trending 
+		ON campaigns(state, category_id, velocity_24h DESC);
+	`).Error; err != nil {
+		return fmt.Errorf("create composite indexes: %w", err)
+	}
+
 	log.Println("Database connected and migrated")
 	return nil
 }
