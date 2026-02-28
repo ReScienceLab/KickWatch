@@ -215,12 +215,26 @@ func GetCampaignHistory(c *gin.Context) {
 	cutoff := time.Now().Add(-time.Duration(daysInt) * 24 * time.Hour)
 
 	var snapshots []model.CampaignSnapshot
-	if err := db.DB.Where("campaign_pid = ? AND snapshot_at >= ?", pid, cutoff).
-		Order("snapshot_at ASC").
+	// Group by snapshot_date and return the latest snapshot per day
+	// Using DISTINCT ON to get one row per (campaign_pid, snapshot_date)
+	if err := db.DB.
+		Where("campaign_pid = ? AND snapshot_date >= DATE(?)", pid, cutoff).
+		Order("snapshot_date ASC, snapshot_at DESC").
 		Find(&snapshots).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"history": snapshots})
+	// Since GORM doesn't support DISTINCT ON directly, we deduplicate in Go
+	seen := make(map[string]bool)
+	dedupedSnapshots := make([]model.CampaignSnapshot, 0, len(snapshots))
+	for _, s := range snapshots {
+		dateKey := s.SnapshotDate.Format("2006-01-02")
+		if !seen[dateKey] {
+			seen[dateKey] = true
+			dedupedSnapshots = append(dedupedSnapshots, s)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"history": dedupedSnapshots})
 }

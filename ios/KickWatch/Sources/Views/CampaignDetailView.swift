@@ -62,10 +62,14 @@ struct CampaignDetailView: View {
                 ExpandableBlurbView(blurb: blurb)
             }
 
-            if let velocity = campaign.velocity_24h,
-               let delta = campaign.pledge_delta_24h,
-               velocity > 0 || delta != 0 {
-                momentumSection(velocity: velocity, delta: delta)
+            // Show momentum section if we have history data OR if there's 24h activity
+            if !historyData.isEmpty ||
+               (campaign.velocity_24h != nil && campaign.pledge_delta_24h != nil &&
+                (campaign.velocity_24h! > 0 || campaign.pledge_delta_24h! != 0)) {
+                momentumSection(
+                    velocity: campaign.velocity_24h ?? 0,
+                    delta: campaign.pledge_delta_24h ?? 0
+                )
             }
 
             if let url = campaign.project_url, let link = URL(string: url) {
@@ -227,13 +231,13 @@ struct CampaignDetailView: View {
                     icon: "dollarsign.circle.fill",
                     label: "24h Change",
                     value: formatDelta(delta),
-                    color: delta > 0 ? .green : .red
+                    color: delta > 0 ? .green : (delta < 0 ? .red : .gray)
                 )
                 metricCard(
                     icon: "percent",
                     label: "Growth Rate",
                     value: String(format: "%.1f%%", velocity),
-                    color: velocity > 0 ? .green : .red
+                    color: velocity > 0 ? .green : (velocity < 0 ? .red : .gray)
                 )
             }
         }
@@ -243,15 +247,18 @@ struct CampaignDetailView: View {
     }
 
     private func momentumBadge(velocity: Double, delta: Double) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: velocity > 0 ? "arrow.up.right" : "arrow.down.right")
+        let icon = velocity > 0 ? "arrow.up.right" : (velocity < 0 ? "arrow.down.right" : "arrow.right")
+        let color: Color = velocity > 0 ? .green : (velocity < 0 ? .red : .gray)
+
+        return HStack(spacing: 4) {
+            Image(systemName: icon)
                 .font(.system(size: 10))
             Text(delta > 0 ? "+\(formatDelta(delta))" : formatDelta(delta))
                 .font(.caption).fontWeight(.semibold)
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
-        .background((velocity > 0 ? Color.green : Color.red).opacity(0.15))
-        .foregroundStyle(velocity > 0 ? .green : .red)
+        .background(color.opacity(0.15))
+        .foregroundStyle(color)
         .clipShape(Capsule())
     }
 
