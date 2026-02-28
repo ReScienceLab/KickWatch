@@ -24,14 +24,20 @@ final class DiscoverViewModel {
             campaigns = resp.campaigns
             nextCursor = resp.next_cursor
             hasMore = resp.next_cursor != nil
+            print("✅ Loaded \(campaigns.count) campaigns, next_cursor: \(nextCursor ?? "nil"), hasMore: \(hasMore)")
         } catch {
             self.error = error.localizedDescription
+            print("❌ Load error: \(error)")
         }
         isLoading = false
     }
 
     func loadMore() async {
-        guard hasMore, let cursor = nextCursor, !isLoadingMore else { return }
+        print("📱 loadMore called - hasMore: \(hasMore), cursor: \(nextCursor ?? "nil"), isLoadingMore: \(isLoadingMore)")
+        guard hasMore, let cursor = nextCursor, !isLoadingMore else { 
+            print("⏹️ loadMore blocked - hasMore: \(hasMore), cursor: \(nextCursor ?? "nil"), isLoadingMore: \(isLoadingMore)")
+            return 
+        }
         isLoadingMore = true
         do {
             let resp = try await APIClient.shared.fetchCampaigns(
@@ -40,8 +46,10 @@ final class DiscoverViewModel {
             campaigns.append(contentsOf: resp.campaigns)
             nextCursor = resp.next_cursor
             hasMore = resp.next_cursor != nil
+            print("✅ Loaded \(resp.campaigns.count) more campaigns, total: \(campaigns.count), next_cursor: \(nextCursor ?? "nil"), hasMore: \(hasMore)")
         } catch {
             self.error = error.localizedDescription
+            print("❌ LoadMore error: \(error)")
         }
         isLoadingMore = false
     }

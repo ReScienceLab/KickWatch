@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strconv"
 
@@ -26,15 +27,34 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
-		// "hot" sort: served from DB by velocity_24h
+		// "hot" sort: served from DB by velocity_24h with offset-based pagination
 		if sort == "hot" && db.IsEnabled() {
+			offset := 0
+			if cursor != "" {
+				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
+					offset, _ = strconv.Atoi(string(decoded))
+				}
+			}
+
 			var campaigns []model.Campaign
-			q := db.DB.Where("state = 'live'").Order("velocity_24h DESC").Limit(limit)
+			q := db.DB.Where("state = 'live'").Order("velocity_24h DESC").Offset(offset).Limit(limit + 1)
 			if categoryID != "" {
 				q = q.Where("category_id = ?", categoryID)
 			}
+			
 			if err := q.Find(&campaigns).Error; err == nil {
-				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nil, "total": len(campaigns)})
+				hasMore := len(campaigns) > limit
+				if hasMore {
+					campaigns = campaigns[:limit]
+				}
+				
+				var nextCursor interface{}
+				if hasMore {
+					nextOffset := offset + limit
+					nextCursor = base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(nextOffset)))
+				}
+				
+				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor, "total": len(campaigns)})
 				return
 			}
 		}

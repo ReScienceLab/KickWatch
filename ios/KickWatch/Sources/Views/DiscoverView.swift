@@ -37,6 +37,8 @@ struct DiscoverView: View {
         .pickerStyle(.segmented)
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .disabled(vm.isLoading && !vm.campaigns.isEmpty)
+        .opacity(vm.isLoading && !vm.campaigns.isEmpty ? 0.6 : 1.0)
     }
 
     private var categoryScroll: some View {
@@ -54,6 +56,8 @@ struct DiscoverView: View {
             .padding(.horizontal)
         }
         .padding(.bottom, 4)
+        .disabled(vm.isLoading && !vm.campaigns.isEmpty)
+        .opacity(vm.isLoading && !vm.campaigns.isEmpty ? 0.6 : 1.0)
     }
 
     private var campaignList: some View {
@@ -63,23 +67,33 @@ struct DiscoverView: View {
             } else if let err = vm.error {
                 Text(err).foregroundStyle(.secondary).padding()
             } else {
-                List {
-                    ForEach(vm.campaigns, id: \.pid) { campaign in
-                        NavigationLink(destination: CampaignDetailView(campaign: campaign)) {
-                            CampaignRowView(campaign: campaign)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
-                        .onAppear {
-                            if campaign.pid == vm.campaigns.last?.pid {
-                                Task { await vm.loadMore() }
+                ZStack {
+                    List {
+                        ForEach(vm.campaigns, id: \.pid) { campaign in
+                            NavigationLink(destination: CampaignDetailView(campaign: campaign)) {
+                                CampaignRowView(campaign: campaign)
+                            }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+                            .onAppear {
+                                if campaign.pid == vm.campaigns.last?.pid {
+                                    Task { await vm.loadMore() }
+                                }
                             }
                         }
+                        if vm.isLoadingMore {
+                            ProgressView().frame(maxWidth: .infinity)
+                        }
                     }
-                    if vm.isLoadingMore {
-                        ProgressView().frame(maxWidth: .infinity)
+                    .listStyle(.plain)
+                    .opacity(vm.isLoading && !vm.campaigns.isEmpty ? 0.3 : 1.0)
+                    
+                    if vm.isLoading && !vm.campaigns.isEmpty {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(uiColor: .systemBackground).opacity(0.5))
                     }
                 }
-                .listStyle(.plain)
             }
         }
     }
