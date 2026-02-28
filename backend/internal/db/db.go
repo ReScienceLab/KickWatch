@@ -180,14 +180,18 @@ func Init(cfg *config.Config) error {
 	// Deduplicate snapshots: keep only the latest per (campaign_pid, snapshot_date).
 	// Run this EVERY time to handle legacy duplicate data from buggy upsert logic.
 	// Must run BEFORE AutoMigrate attempts to create the unique index.
-	if err := DB.Exec(`
+	result := DB.Exec(`
 		DELETE FROM campaign_snapshots a USING campaign_snapshots b
 		WHERE a.campaign_pid = b.campaign_pid
+		  AND a.snapshot_date IS NOT NULL
+		  AND b.snapshot_date IS NOT NULL
 		  AND a.snapshot_date = b.snapshot_date
 		  AND a.snapshot_at < b.snapshot_at
-	`).Error; err != nil {
-		return fmt.Errorf("deduplicate campaign_snapshots: %w", err)
+	`)
+	if result.Error != nil {
+		return fmt.Errorf("deduplicate campaign_snapshots: %w", result.Error)
 	}
+	log.Printf("DB init: deduplicated %d snapshot rows", result.RowsAffected)
 
 	// NOW run AutoMigrate after all column renames are complete
 	if err := DB.AutoMigrate(
