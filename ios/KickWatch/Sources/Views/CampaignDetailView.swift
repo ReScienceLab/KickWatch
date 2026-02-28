@@ -45,9 +45,9 @@ struct CampaignDetailView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(campaign.name)
+                Text(campaign.displayName)
                     .font(.title2).fontWeight(.bold)
-                if let creator = campaign.creator_name {
+                if let creator = campaign.displayCreatorName {
                     Text("by \(creator)").font(.subheadline).foregroundStyle(.secondary)
                 }
                 if let cat = campaign.category_name {
@@ -60,7 +60,7 @@ struct CampaignDetailView: View {
             fundingStats
                 .padding(.horizontal)
 
-            if let blurb = campaign.blurb, !blurb.isEmpty {
+            if let blurb = campaign.displayBlurb, !blurb.isEmpty {
                 ExpandableBlurbView(blurb: blurb)
                     .padding(.horizontal)
             }
@@ -202,8 +202,8 @@ struct CampaignDetailView: View {
         } else {
             let c = Campaign(
                 pid: campaign.pid,
-                name: campaign.name,
-                blurb: campaign.blurb ?? "",
+                name: campaign.displayName,
+                blurb: campaign.displayBlurb ?? "",
                 photoURL: campaign.photo_url ?? "",
                 goalAmount: campaign.goal_amount ?? 0,
                 goalCurrency: campaign.goal_currency ?? "USD",
@@ -213,7 +213,7 @@ struct CampaignDetailView: View {
                 categoryName: campaign.category_name ?? "",
                 categoryID: campaign.category_id ?? "",
                 projectURL: campaign.project_url ?? "",
-                creatorName: campaign.creator_name ?? "",
+                creatorName: campaign.displayCreatorName ?? "",
                 percentFunded: campaign.percent_funded ?? 0,
                 isWatched: true
             )

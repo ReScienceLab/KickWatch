@@ -17,6 +17,9 @@ type Config struct {
 	// ScrapingBee configuration
 	ScrapingBeeAPIKey        string
 	ScrapingBeeMaxConcurrent int
+	// Vertex AI configuration
+	VertexAIProjectID string
+	VertexAILocation  string
 }
 
 func Load() *Config {
@@ -47,5 +50,7 @@ func Load() *Config {
 		APNSEnv:                  apnsEnv,
 		ScrapingBeeAPIKey:        os.Getenv("SCRAPINGBEE_API_KEY"),
 		ScrapingBeeMaxConcurrent: maxConcurrent,
+		VertexAIProjectID:        os.Getenv("VERTEX_AI_PROJECT_ID"),
+		VertexAILocation:         os.Getenv("VERTEX_AI_LOCATION"),
 	}
 }

@@ -6,44 +6,44 @@ import "github.com/kickwatch/backend/internal/model"
 // Root IDs and subcategory IDs confirmed from Kickstarter REST API public datasets.
 var kickstarterCategories = []model.Category{
 	// Root categories
-	{ID: "1", Name: "Art"},
-	{ID: "3", Name: "Comics"},
-	{ID: "4", Name: "Crafts"},
-	{ID: "5", Name: "Dance"},
-	{ID: "7", Name: "Design"},
-	{ID: "9", Name: "Fashion"},
-	{ID: "10", Name: "Food"},
-	{ID: "11", Name: "Film & Video"},
-	{ID: "12", Name: "Games"},
-	{ID: "13", Name: "Music"},
-	{ID: "14", Name: "Photography"},
-	{ID: "16", Name: "Technology"},
-	{ID: "17", Name: "Theater"},
-	{ID: "18", Name: "Publishing"},
+	{ID: "1", Name: "Art", NameZh: "艺术"},
+	{ID: "3", Name: "Comics", NameZh: "漫画"},
+	{ID: "4", Name: "Crafts", NameZh: "手工艺"},
+	{ID: "5", Name: "Dance", NameZh: "舞蹈"},
+	{ID: "7", Name: "Design", NameZh: "设计"},
+	{ID: "9", Name: "Fashion", NameZh: "时尚"},
+	{ID: "10", Name: "Food", NameZh: "美食"},
+	{ID: "11", Name: "Film & Video", NameZh: "影视"},
+	{ID: "12", Name: "Games", NameZh: "游戏"},
+	{ID: "13", Name: "Music", NameZh: "音乐"},
+	{ID: "14", Name: "Photography", NameZh: "摄影"},
+	{ID: "16", Name: "Technology", NameZh: "科技"},
+	{ID: "17", Name: "Theater", NameZh: "戏剧"},
+	{ID: "18", Name: "Publishing", NameZh: "出版"},
 
 	// Design subcategories
-	{ID: "28", Name: "Product Design", ParentID: "7"},
+	{ID: "28", Name: "Product Design", NameZh: "产品设计", ParentID: "7"},
 
 	// Fashion subcategories
-	{ID: "263", Name: "Apparel", ParentID: "9"},
+	{ID: "263", Name: "Apparel", NameZh: "服装", ParentID: "9"},
 
 	// Film & Video subcategories
-	{ID: "29", Name: "Animation", ParentID: "11"},
-	{ID: "303", Name: "Television", ParentID: "11"},
+	{ID: "29", Name: "Animation", NameZh: "动画", ParentID: "11"},
+	{ID: "303", Name: "Television", NameZh: "电视", ParentID: "11"},
 
 	// Games subcategories
-	{ID: "34", Name: "Tabletop Games", ParentID: "12"},
-	{ID: "35", Name: "Video Games", ParentID: "12"},
-	{ID: "270", Name: "Gaming Hardware", ParentID: "12"},
+	{ID: "34", Name: "Tabletop Games", NameZh: "桌游", ParentID: "12"},
+	{ID: "35", Name: "Video Games", NameZh: "电子游戏", ParentID: "12"},
+	{ID: "270", Name: "Gaming Hardware", NameZh: "游戏硬件", ParentID: "12"},
 
 	// Technology subcategories
-	{ID: "52", Name: "Hardware", ParentID: "16"},
-	{ID: "331", Name: "3D Printing", ParentID: "16"},
-	{ID: "337", Name: "Gadgets", ParentID: "16"},
-	{ID: "339", Name: "Sound", ParentID: "16"},
+	{ID: "52", Name: "Hardware", NameZh: "硬件", ParentID: "16"},
+	{ID: "331", Name: "3D Printing", NameZh: "3D打印", ParentID: "16"},
+	{ID: "337", Name: "Gadgets", NameZh: "数码产品", ParentID: "16"},
+	{ID: "339", Name: "Sound", NameZh: "音频设备", ParentID: "16"},
 
 	// Publishing subcategories
-	{ID: "47", Name: "Fiction", ParentID: "18"},
+	{ID: "47", Name: "Fiction", NameZh: "小说", ParentID: "18"},
 }
 
 // crawlCategories defines all category IDs to crawl and their page depth.

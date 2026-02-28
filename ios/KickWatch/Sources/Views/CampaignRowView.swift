@@ -29,10 +29,10 @@ struct CampaignRowView: View {
 
     private var info: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(campaign.name)
+            Text(campaign.displayName)
                 .font(.subheadline).fontWeight(.semibold)
                 .lineLimit(2)
-            if let creator = campaign.creator_name {
+            if let creator = campaign.displayCreatorName {
                 Text("by \(creator)")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -173,8 +173,8 @@ struct CampaignRowView: View {
         } else {
             let c = Campaign(
                 pid: campaign.pid,
-                name: campaign.name,
-                blurb: campaign.blurb ?? "",
+                name: campaign.displayName,
+                blurb: campaign.displayBlurb ?? "",
                 photoURL: campaign.photo_url ?? "",
                 goalAmount: campaign.goal_amount ?? 0,
                 goalCurrency: campaign.goal_currency ?? "USD",
@@ -183,7 +183,7 @@ struct CampaignRowView: View {
                 categoryName: campaign.category_name ?? "",
                 categoryID: campaign.category_id ?? "",
                 projectURL: campaign.project_url ?? "",
-                creatorName: campaign.creator_name ?? "",
+                creatorName: campaign.displayCreatorName ?? "",
                 percentFunded: campaign.percent_funded ?? 0,
                 isWatched: true
             )

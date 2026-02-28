@@ -102,7 +102,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         CampaignDTO(
             pid: pid,
             name: name,
+            name_zh: nil,
             blurb: nil,
+            blurb_zh: nil,
             photo_url: nil,
             goal_amount: 1000,
             goal_currency: "USD",
@@ -113,6 +115,7 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             category_id: nil,
             project_url: nil,
             creator_name: nil,
+            creator_name_zh: nil,
             percent_funded: 50,
             backers_count: 42,
             slug: nil,

@@ -29,14 +29,16 @@ type CronService struct {
 	db              *gorm.DB
 	scrapingService *KickstarterScrapingService
 	apnsClient      *APNsClient
+	translator      *TranslatorService
 	scheduler       *cron.Cron
 }
 
-func NewCronService(db *gorm.DB, scrapingService *KickstarterScrapingService, apns *APNsClient) *CronService {
+func NewCronService(db *gorm.DB, scrapingService *KickstarterScrapingService, apns *APNsClient, translator *TranslatorService) *CronService {
 	return &CronService{
 		db:              db,
 		scrapingService: scrapingService,
 		apnsClient:      apns,
+		translator:      translator,
 		scheduler:       cron.New(cron.WithLocation(time.UTC)),
 	}
 }
@@ -82,7 +84,7 @@ func (s *CronService) Stop() {
 func (s *CronService) syncCategories() {
 	result := s.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "parent_id"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "name_zh", "parent_id"}),
 	}).Create(&kickstarterCategories)
 	if result.Error != nil {
 		log.Printf("Cron: category sync error: %v", result.Error)
@@ -137,12 +139,20 @@ func (s *CronService) RunCrawlNow() error {
 				for i := range campaigns {
 					campaigns[i].LastUpdatedAt = now
 				}
+
+				// Translate campaigns to Chinese using Vertex AI
+				if s.translator != nil {
+					if err := s.translator.TranslateCampaigns(campaigns); err != nil {
+						log.Printf("Cron: translation error sort=%s cat=%s page=%d: %v (continuing without translations)", sortCfg.sort, cat.ID, page, err)
+					}
+				}
+
 				result := s.db.Clauses(clause.OnConflict{
 					Columns: []clause.Column{{Name: "pid"}},
 					DoUpdates: clause.AssignmentColumns([]string{
-						"name", "blurb", "photo_url", "goal_amount", "goal_currency",
+						"name", "name_zh", "blurb", "blurb_zh", "photo_url", "goal_amount", "goal_currency",
 						"pledged_amount", "deadline", "state", "category_id", "category_name",
-						"project_url", "creator_name", "percent_funded", "backers_count",
+						"project_url", "creator_name", "creator_name_zh", "percent_funded", "backers_count",
 						"slug", "last_updated_at",
 					}),
 				}).Create(&campaigns)
@@ -210,12 +220,20 @@ func (s *CronService) RunBackfill() error {
 				for i := range campaigns {
 					campaigns[i].LastUpdatedAt = now
 				}
+
+				// Translate campaigns to Chinese using Vertex AI
+				if s.translator != nil {
+					if err := s.translator.TranslateCampaigns(campaigns); err != nil {
+						log.Printf("Backfill: translation error sort=%s cat=%s page=%d: %v (continuing without translations)", sortCfg.sort, cat.ID, page, err)
+					}
+				}
+
 				result := s.db.Clauses(clause.OnConflict{
 					Columns: []clause.Column{{Name: "pid"}},
 					DoUpdates: clause.AssignmentColumns([]string{
-						"name", "blurb", "photo_url", "goal_amount", "goal_currency",
+						"name", "name_zh", "blurb", "blurb_zh", "photo_url", "goal_amount", "goal_currency",
 						"pledged_amount", "deadline", "state", "category_id", "category_name",
-						"project_url", "creator_name", "percent_funded", "backers_count",
+						"project_url", "creator_name", "creator_name_zh", "percent_funded", "backers_count",
 						"slug", "last_updated_at",
 					}),
 				}).Create(&campaigns)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -48,7 +49,22 @@ func main() {
 				log.Printf("APNs init failed (push disabled): %v", err)
 			}
 		}
-		cronSvc = service.NewCronService(db.DB, scrapingService, apnsClient)
+
+		// Initialize Vertex AI translator
+		var translator *service.TranslatorService
+		if cfg.VertexAIProjectID != "" && cfg.VertexAILocation != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			var err error
+			translator, err = service.NewTranslatorService(ctx, cfg.VertexAIProjectID, cfg.VertexAILocation)
+			if err != nil {
+				log.Printf("Vertex AI translator init failed (translation disabled): %v", err)
+			} else {
+				log.Printf("Vertex AI translator initialized (project=%s, location=%s)", cfg.VertexAIProjectID, cfg.VertexAILocation)
+			}
+		}
+
+		cronSvc = service.NewCronService(db.DB, scrapingService, apnsClient, translator)
 		cronSvc.Start()
 		defer cronSvc.Stop()
 
