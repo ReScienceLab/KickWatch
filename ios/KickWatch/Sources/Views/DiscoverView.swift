@@ -5,6 +5,7 @@ struct DiscoverView: View {
     @State private var vm = DiscoverViewModel()
     @State private var searchText = ""
     @State private var showSearch = false
+    @State private var lastLoadMorePID: String?
 
     private let sortOptions = [("hot", "🔥 Hot"), ("trending", "Trending"), ("newest", "New"), ("ending", "Ending")]
 
@@ -30,7 +31,10 @@ struct DiscoverView: View {
     private var sortPicker: some View {
         Picker("Sort", selection: Binding(
             get: { vm.selectedSort },
-            set: { newSort in Task { await vm.selectSort(newSort) } }
+            set: { newSort in 
+                lastLoadMorePID = nil  // Reset to allow loadMore with new data
+                Task { await vm.selectSort(newSort) } 
+            }
         )) {
             ForEach(sortOptions, id: \.0) { key, label in Text(label).tag(key) }
         }
@@ -45,10 +49,12 @@ struct DiscoverView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 CategoryChip(title: "All", isSelected: vm.selectedCategoryID == nil) {
+                    lastLoadMorePID = nil  // Reset to allow loadMore with new data
                     Task { await vm.selectCategory(nil) }
                 }
                 ForEach(vm.categories.filter { $0.parent_id == nil }, id: \.id) { cat in
                     CategoryChip(title: cat.name, isSelected: vm.selectedCategoryID == cat.id) {
+                        lastLoadMorePID = nil  // Reset to allow loadMore with new data
                         Task { await vm.selectCategory(cat.id) }
                     }
                 }
@@ -75,7 +81,9 @@ struct DiscoverView: View {
                             }
                             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
                             .onAppear {
-                                if campaign.pid == vm.campaigns.last?.pid {
+                                if campaign.pid == vm.campaigns.last?.pid, 
+                                   lastLoadMorePID != campaign.pid {
+                                    lastLoadMorePID = campaign.pid
                                     Task { await vm.loadMore() }
                                 }
                             }
