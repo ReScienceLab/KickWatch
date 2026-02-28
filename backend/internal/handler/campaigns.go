@@ -28,13 +28,13 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
-		// Serve hot/ending from DB, but NOT trending/newest
-		// - hot: velocity_24h is computed from snapshots (our metric)
-		// - ending: deadline is from Kickstarter (semantically correct)
-		// - trending: needs ScrapingBee MAGIC (Kickstarter's algorithm)
-		// - newest: first_seen_at is our crawl time, NOT Kickstarter's launch time
-		//   → trending/newest must use ScrapingBee to maintain semantic correctness
-		if db.IsEnabled() && (sort == "hot" || sort == "ending") {
+		// Serve ALL sorts from DB for client requests (zero ScrapingBee credits)
+		// Trade-offs for cost optimization:
+		// - trending: velocity_24h approximates Kickstarter's MAGIC (not exact but close)
+		// - newest: first_seen_at = crawl time, not launch time (daily crawl minimizes drift)
+		// - hot: velocity_24h (our metric)
+		// - ending: deadline (exact from Kickstarter)
+		if db.IsEnabled() {
 			offset := 0
 			if cursor != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
@@ -50,10 +50,14 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			
 			// Map sort to DB columns
 			switch sort {
-			case "hot":
+			case "trending", "hot":
 				q = q.Order("velocity_24h DESC, percent_funded DESC")
+			case "newest":
+				q = q.Order("first_seen_at DESC")
 			case "ending":
 				q = q.Order("deadline ASC")
+			default:
+				q = q.Order("velocity_24h DESC, percent_funded DESC")
 			}
 			
 			if categoryID != "" {
@@ -80,10 +84,9 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			// If DB query fails or returns empty, fall through to ScrapingBee fallback
 		}
 
-		// Use ScrapingBee for:
-		// - sort=trending (needs Kickstarter's MAGIC algorithm)
-		// - sort=newest (needs real launch date, not first_seen_at)
-		// - DB unavailable or empty (fallback)
+		// ScrapingBee fallback only for:
+		// - DB unavailable or empty (cold start, failed query)
+		// - SearchCampaigns endpoint (user search with query text)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
 			gqlSort = "MAGIC"
