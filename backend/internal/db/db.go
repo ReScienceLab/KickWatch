@@ -155,19 +155,32 @@ func Init(cfg *config.Config) error {
 	}
 
 	// Create composite indexes for optimal query performance
-	// These support the common query patterns: WHERE state='live' ORDER BY ...
+	// All queries filter WHERE state='live' AND deadline >= NOW(), so deadline comes first
+	// to exclude expired rows early and avoid table scans as expired data grows
 	if err := DB.Exec(`
+		-- Trending: WHERE state='live' AND deadline >= NOW() ORDER BY velocity_24h DESC, percent_funded DESC
 		CREATE INDEX IF NOT EXISTS idx_campaigns_trending 
-		ON campaigns(state, velocity_24h DESC, percent_funded DESC);
+		ON campaigns(state, deadline, velocity_24h DESC, percent_funded DESC);
 		
+		-- Newest: WHERE state='live' AND deadline >= NOW() ORDER BY first_seen_at DESC
 		CREATE INDEX IF NOT EXISTS idx_campaigns_newest 
-		ON campaigns(state, first_seen_at DESC);
+		ON campaigns(state, deadline, first_seen_at DESC);
 		
+		-- Ending: WHERE state='live' AND deadline >= NOW() ORDER BY deadline ASC
 		CREATE INDEX IF NOT EXISTS idx_campaigns_ending 
 		ON campaigns(state, deadline ASC);
 		
+		-- Category+Trending: WHERE state='live' AND deadline >= NOW() AND category_id=? ORDER BY velocity_24h DESC, percent_funded DESC
 		CREATE INDEX IF NOT EXISTS idx_campaigns_category_trending 
-		ON campaigns(state, category_id, velocity_24h DESC);
+		ON campaigns(state, deadline, category_id, velocity_24h DESC, percent_funded DESC);
+		
+		-- Category+Newest: WHERE state='live' AND deadline >= NOW() AND category_id=? ORDER BY first_seen_at DESC
+		CREATE INDEX IF NOT EXISTS idx_campaigns_category_newest 
+		ON campaigns(state, deadline, category_id, first_seen_at DESC);
+		
+		-- Category+Ending: WHERE state='live' AND deadline >= NOW() AND category_id=? ORDER BY deadline ASC
+		CREATE INDEX IF NOT EXISTS idx_campaigns_category_ending 
+		ON campaigns(state, deadline, category_id);
 	`).Error; err != nil {
 		return fmt.Errorf("create composite indexes: %w", err)
 	}

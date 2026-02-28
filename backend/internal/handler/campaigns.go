@@ -14,6 +14,7 @@ import (
 
 var sortMap = map[string]string{
 	"trending": "MAGIC",
+	"hot":      "MAGIC", // Fallback uses MAGIC for hot sort (close approximation)
 	"newest":   "NEWEST",
 	"ending":   "END_DATE",
 }
@@ -64,28 +65,34 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 				q = q.Where("category_id = ?", categoryID)
 			}
 			
-			// Only return DB results if we have data; otherwise fall through to ScrapingBee
-			if err := q.Find(&campaigns).Error; err == nil && len(campaigns) > 0 {
-				hasMore := len(campaigns) > limit
-				if hasMore {
-					campaigns = campaigns[:limit]
+			// Return DB results if we have data
+			// Note: Once DB is seeded, always use DB to avoid cursor format conflicts
+			// (DB uses base64 offsets, ScrapingBee uses page:N format)
+			if err := q.Find(&campaigns).Error; err == nil {
+				// Even if empty, return DB results if we're paginating (cursor != "")
+				// This prevents cursor format cycling between DB and ScrapingBee
+				if len(campaigns) > 0 || cursor != "" {
+					hasMore := len(campaigns) > limit
+					if hasMore {
+						campaigns = campaigns[:limit]
+					}
+					
+					var nextCursor interface{}
+					if hasMore {
+						nextOffset := offset + limit
+						nextCursor = base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(nextOffset)))
+					}
+					
+					// Don't include total for DB queries (we don't track global count)
+					c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor})
+					return
 				}
-				
-				var nextCursor interface{}
-				if hasMore {
-					nextOffset := offset + limit
-					nextCursor = base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(nextOffset)))
-				}
-				
-				// Don't include total for DB queries (we don't track global count)
-				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor})
-				return
 			}
-			// If DB query fails or returns empty, fall through to ScrapingBee fallback
+			// Only fall through to ScrapingBee on first load (cursor == "") and DB empty/failed
 		}
 
 		// ScrapingBee fallback only for:
-		// - DB unavailable or empty (cold start, failed query)
+		// - First load (cursor == "") when DB is unavailable or empty (cold start)
 		// - SearchCampaigns endpoint (user search with query text)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
