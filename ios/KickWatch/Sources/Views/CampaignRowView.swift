@@ -14,11 +14,8 @@ struct CampaignRowView: View {
             thumbnail
             info
             Spacer(minLength: 4)
-            VStack(spacing: 6) {
-                SparklineView(pid: campaign.pid)
-                watchButton
-            }
-            .padding(.trailing, 16)
+            watchButton
+                .padding(.trailing, 16)
         }
         .padding(.vertical, 10)
         .padding(.leading, 16)

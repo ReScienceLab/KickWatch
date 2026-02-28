@@ -62,7 +62,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			// Cron only upserts campaigns from discover pages (which only show live ones),
 			// but never marks rows as ended when they disappear/expire.
 			q := db.DB.Where("state = 'live' AND deadline >= ?", time.Now()).Offset(offset).Limit(limit + 1)
-			
+
 			// Map sort to DB columns
 			switch sort {
 			case "trending", "hot":
@@ -74,11 +74,11 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			default:
 				q = q.Order("velocity_24h DESC, percent_funded DESC")
 			}
-			
+
 			if categoryID != "" {
 				q = q.Where("category_id = ?", categoryID)
 			}
-			
+
 			// Return DB results if we have data
 			// Note: Once using DB cursors, always use DB to maintain cursor format consistency
 			if err := q.Find(&campaigns).Error; err == nil {
@@ -89,13 +89,13 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 					if hasMore {
 						campaigns = campaigns[:limit]
 					}
-					
+
 					var nextCursor interface{}
 					if hasMore {
 						nextOffset := offset + limit
 						nextCursor = base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(nextOffset)))
 					}
-					
+
 					// Don't include total for DB queries (we don't track global count)
 					c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor})
 					return
@@ -172,24 +172,6 @@ func GetCampaign(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, campaign)
-}
-
-// GetCampaignHistory returns daily pledge snapshots for a campaign, oldest first.
-func GetCampaignHistory(c *gin.Context) {
-	pid := c.Param("pid")
-	if !db.IsEnabled() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not available"})
-		return
-	}
-	var snapshots []model.CampaignSnapshot
-	if err := db.DB.
-		Where("campaign_pid = ?", pid).
-		Order("snapshot_date ASC").
-		Find(&snapshots).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, snapshots)
 }
 
 func ListCategories(client *service.KickstarterScrapingService) gin.HandlerFunc {
