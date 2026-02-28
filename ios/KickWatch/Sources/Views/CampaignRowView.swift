@@ -37,12 +37,21 @@ struct CampaignRowView: View {
             }
             fundingBar
             HStack(spacing: 8) {
+                stateBadge
                 Text("\(Int(campaign.percent_funded ?? 0))% funded")
                     .font(.caption2).foregroundStyle(.secondary)
                 if let deadline = campaign.deadline, let date = ISO8601DateFormatter().date(from: deadline) {
                     let days = max(0, Calendar.current.dateComponents([.day], from: .now, to: date).day ?? 0)
                     Text("\(days)d left")
                         .font(.caption2).foregroundStyle(.secondary)
+                }
+                if let backers = campaign.backers_count, backers > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 9))
+                        Text(formatBackers(backers))
+                    }
+                    .font(.caption2).foregroundStyle(.secondary)
                 }
                 momentumBadge
             }
@@ -53,9 +62,16 @@ struct CampaignRowView: View {
     private var momentumBadge: some View {
         if let v = campaign.velocity_24h, v > 0 {
             let (icon, color): (String, Color) = v >= 200 ? ("🔥", .red) : ("⚡", .orange)
-            Text("\(icon) +\(Int(v))%")
-                .font(.caption2).fontWeight(.semibold)
-                .foregroundStyle(color)
+
+            if let delta = campaign.pledge_delta_24h, delta > 0 {
+                Text("\(icon) +\(formatDelta(delta))")
+                    .font(.caption2).fontWeight(.semibold)
+                    .foregroundStyle(color)
+            } else {
+                Text("\(icon) +\(Int(v))%")
+                    .font(.caption2).fontWeight(.semibold)
+                    .foregroundStyle(color)
+            }
         } else if isNew {
             Text("New")
                 .font(.caption2).fontWeight(.semibold)
@@ -66,10 +82,55 @@ struct CampaignRowView: View {
         }
     }
 
+    @ViewBuilder
+    private var stateBadge: some View {
+        if let state = campaign.state, state != "live" {
+            Text(stateLabel(state))
+                .font(.caption2).fontWeight(.medium)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(stateColor(state).opacity(0.15))
+                .foregroundStyle(stateColor(state))
+                .clipShape(Capsule())
+        }
+    }
+
     private var isNew: Bool {
         guard let s = campaign.first_seen_at,
               let date = ISO8601DateFormatter().date(from: s) else { return false }
         return Date().timeIntervalSince(date) < 48 * 3600
+    }
+
+    private func formatBackers(_ count: Int) -> String {
+        if count >= 1000 {
+            return String(format: "%.1fK", Double(count) / 1000)
+        }
+        return "\(count)"
+    }
+
+    private func formatDelta(_ amount: Double) -> String {
+        if amount >= 1_000_000 {
+            return String(format: "$%.1fM", amount / 1_000_000)
+        } else if amount >= 1_000 {
+            return String(format: "$%.0fK", amount / 1_000)
+        }
+        return "$\(Int(amount))"
+    }
+
+    private func stateLabel(_ state: String) -> String {
+        switch state {
+        case "successful": return "Funded ✓"
+        case "failed": return "Failed"
+        case "canceled": return "Canceled"
+        default: return "Live"
+        }
+    }
+
+    private func stateColor(_ state: String) -> Color {
+        switch state {
+        case "successful": return .green
+        case "failed", "canceled": return .red
+        default: return .accentColor
+        }
     }
 
     private var fundingBar: some View {

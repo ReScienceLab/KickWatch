@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kickwatch/backend/internal/db"
@@ -155,4 +156,33 @@ func ListCategories(client *service.KickstarterScrapingService) gin.HandlerFunc 
 		}
 		c.JSON(http.StatusOK, cats)
 	}
+}
+
+func GetCampaignHistory(c *gin.Context) {
+	pid := c.Param("pid")
+	days := c.DefaultQuery("days", "14")
+	daysInt, err := strconv.Atoi(days)
+	if err != nil || daysInt < 1 {
+		daysInt = 14
+	}
+	if daysInt > 30 {
+		daysInt = 30
+	}
+
+	if !db.IsEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not available"})
+		return
+	}
+
+	cutoff := time.Now().Add(-time.Duration(daysInt) * 24 * time.Hour)
+
+	var snapshots []model.CampaignSnapshot
+	if err := db.DB.Where("campaign_pid = ? AND snapshot_at >= ?", pid, cutoff).
+		Order("snapshot_at ASC").
+		Find(&snapshots).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"history": snapshots})
 }

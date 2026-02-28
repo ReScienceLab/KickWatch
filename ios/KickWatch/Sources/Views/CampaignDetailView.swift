@@ -5,6 +5,8 @@ struct CampaignDetailView: View {
     let campaign: CampaignDTO
     @Query private var watchlist: [Campaign]
     @Environment(\.modelContext) private var modelContext
+    @State private var historyData: [HistoryDataPoint] = []
+    @State private var isLoadingHistory = false
 
     private var isWatched: Bool {
         watchlist.contains { $0.pid == campaign.pid && $0.isWatched }
@@ -28,6 +30,9 @@ struct CampaignDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarItems }
+        .task {
+            await loadHistory()
+        }
     }
 
     private var heroImage: some View {
@@ -53,6 +58,16 @@ struct CampaignDetailView: View {
 
             fundingStats
 
+            if let blurb = campaign.blurb, !blurb.isEmpty {
+                ExpandableBlurbView(blurb: blurb)
+            }
+
+            if let velocity = campaign.velocity_24h,
+               let delta = campaign.pledge_delta_24h,
+               velocity > 0 || delta != 0 {
+                momentumSection(velocity: velocity, delta: delta)
+            }
+
             if let url = campaign.project_url, let link = URL(string: url) {
                 Link(destination: link) {
                     Label("Back this project", systemImage: "arrow.up.right.square.fill")
@@ -70,14 +85,30 @@ struct CampaignDetailView: View {
     private var fundingStats: some View {
         VStack(spacing: 12) {
             fundingRing
-            HStack {
-                statBox(label: "Goal", value: formattedAmount(campaign.goal_amount, currency: campaign.goal_currency))
-                Divider()
-                statBox(label: "Pledged", value: formattedAmount(campaign.pledged_amount, currency: campaign.goal_currency))
-                Divider()
-                statBox(label: "Days Left", value: "\(daysLeft)")
+
+            VStack(spacing: 8) {
+                HStack {
+                    statBox(label: "Goal",
+                           value: formattedAmount(campaign.goal_amount, currency: campaign.goal_currency),
+                           icon: "target")
+                    Divider()
+                    statBox(label: "Pledged",
+                           value: formattedAmount(campaign.pledged_amount, currency: campaign.goal_currency),
+                           icon: "dollarsign.circle.fill")
+                }
+                .frame(height: 60)
+
+                HStack {
+                    statBox(label: "Backers",
+                           value: formatBackersLarge(campaign.backers_count),
+                           icon: "person.2.fill")
+                    Divider()
+                    statBox(label: "Days Left",
+                           value: "\(daysLeft)",
+                           icon: "calendar")
+                }
+                .frame(height: 60)
             }
-            .frame(height: 60)
             .padding()
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -100,12 +131,27 @@ struct CampaignDetailView: View {
         .padding(.vertical, 8)
     }
 
-    private func statBox(label: String, value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value).font(.subheadline).fontWeight(.semibold)
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+    private func statBox(label: String, value: String, icon: String? = nil) -> some View {
+        VStack(spacing: 4) {
+            if let icon = icon {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.secondary)
+            }
+            Text(value).font(.title3).fontWeight(.bold)
+            Text(label).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func formatBackersLarge(_ count: Int?) -> String {
+        guard let count = count else { return "—" }
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000)
+        }
+        return "\(count)"
     }
 
     private func formattedAmount(_ amount: Double?, currency: String?) -> String {
@@ -155,5 +201,139 @@ struct CampaignDetailView: View {
             modelContext.insert(c)
         }
         try? modelContext.save()
+    }
+
+    private func momentumSection(velocity: Double, delta: Double) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(.orange)
+                Text("24-Hour Momentum")
+                    .font(.subheadline).fontWeight(.semibold)
+                Spacer()
+                momentumBadge(velocity: velocity, delta: delta)
+            }
+
+            if !historyData.isEmpty {
+                SparklineView(dataPoints: historyData)
+            } else if isLoadingHistory {
+                ProgressView()
+                    .frame(height: 60)
+                    .frame(maxWidth: .infinity)
+            }
+
+            HStack(spacing: 16) {
+                metricCard(
+                    icon: "dollarsign.circle.fill",
+                    label: "24h Change",
+                    value: formatDelta(delta),
+                    color: delta > 0 ? .green : .red
+                )
+                metricCard(
+                    icon: "percent",
+                    label: "Growth Rate",
+                    value: String(format: "%.1f%%", velocity),
+                    color: velocity > 0 ? .green : .red
+                )
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func momentumBadge(velocity: Double, delta: Double) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: velocity > 0 ? "arrow.up.right" : "arrow.down.right")
+                .font(.system(size: 10))
+            Text(delta > 0 ? "+\(formatDelta(delta))" : formatDelta(delta))
+                .font(.caption).fontWeight(.semibold)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background((velocity > 0 ? Color.green : Color.red).opacity(0.15))
+        .foregroundStyle(velocity > 0 ? .green : .red)
+        .clipShape(Capsule())
+    }
+
+    private func metricCard(icon: String, label: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                Text(label)
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.title3).fontWeight(.bold)
+                .foregroundStyle(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func formatDelta(_ amount: Double) -> String {
+        let absAmount = abs(amount)
+        if absAmount >= 1_000_000 {
+            return String(format: "$%.1fM", amount / 1_000_000)
+        } else if absAmount >= 1_000 {
+            return String(format: "$%.0fK", amount / 1_000)
+        }
+        return "$\(Int(amount))"
+    }
+
+    private func loadHistory() async {
+        isLoadingHistory = true
+        defer { isLoadingHistory = false }
+
+        do {
+            let response = try await APIClient.shared.fetchCampaignHistory(pid: campaign.pid, days: 14)
+            historyData = response.history
+        } catch {
+            print("Failed to load history: \(error)")
+        }
+    }
+}
+
+struct ExpandableBlurbView: View {
+    let blurb: String
+    @State private var isExpanded = false
+
+    private var shouldShowButton: Bool {
+        blurb.count > 150
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("About this project")
+                .font(.subheadline).fontWeight(.semibold)
+
+            Text(blurb)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(isExpanded ? nil : 3)
+
+            if shouldShowButton {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(isExpanded ? "Show less" : "Read more")
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                    }
+                    .font(.caption).fontWeight(.medium)
+                    .foregroundStyle(.accentColor)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

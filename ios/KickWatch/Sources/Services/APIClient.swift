@@ -15,6 +15,7 @@ struct CampaignDTO: Codable {
     let project_url: String?
     let creator_name: String?
     let percent_funded: Double?
+    let backers_count: Int?
     let slug: String?
     let velocity_24h: Double?
     let pledge_delta_24h: Double?
@@ -36,6 +37,22 @@ struct CampaignListResponse: Codable {
 struct SearchResponse: Codable {
     let campaigns: [CampaignDTO]
     let next_cursor: String?
+}
+
+struct HistoryDataPoint: Codable, Identifiable {
+    let id: String
+    let campaign_pid: String
+    let pledged_amount: Double
+    let percent_funded: Double
+    let snapshot_at: String
+
+    var date: Date? {
+        ISO8601DateFormatter().date(from: snapshot_at)
+    }
+}
+
+struct CampaignHistoryResponse: Codable {
+    let history: [HistoryDataPoint]
 }
 
 struct RegisterDeviceRequest: Codable {
@@ -94,6 +111,7 @@ actor APIClient {
 
     private let baseURL: String
     private let session: URLSession
+    private var historyCache: [String: (data: CampaignHistoryResponse, timestamp: Date)] = [:]
 
     init(baseURL: String? = nil) {
         #if DEBUG
@@ -158,6 +176,20 @@ actor APIClient {
     func fetchAlertMatches(alertID: String) async throws -> [CampaignDTO] {
         let url = URL(string: baseURL + "/api/alerts/\(alertID)/matches")!
         return try await get(url: url)
+    }
+
+    func fetchCampaignHistory(pid: String, days: Int = 14) async throws -> CampaignHistoryResponse {
+        if let cached = historyCache[pid],
+           Date().timeIntervalSince(cached.timestamp) < 300 {
+            return cached.data
+        }
+
+        var components = URLComponents(string: baseURL + "/api/campaigns/\(pid)/history")!
+        components.queryItems = [URLQueryItem(name: "days", value: String(days))]
+
+        let response: CampaignHistoryResponse = try await get(url: components.url!)
+        historyCache[pid] = (response, Date())
+        return response
     }
 
     private func get<R: Decodable>(url: URL) async throws -> R {
