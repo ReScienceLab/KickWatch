@@ -25,6 +25,7 @@ targets:
         NSUserNotificationsUsageDescription: "KickWatch sends daily digests when new campaigns match your keyword alerts."
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIRequiresFullScreen: false
