@@ -155,20 +155,30 @@ func Init(cfg *config.Config) error {
 	}
 
 	// Create composite indexes for optimal query performance
-	// These support the common query patterns: WHERE state='live' AND deadline >= NOW() ORDER BY ...
-	// Including deadline in the index allows PostgreSQL to filter efficiently before sorting
+	// All queries filter WHERE state='live' AND deadline >= NOW(), so deadline comes first
+	// to exclude expired rows early and avoid table scans as expired data grows
+	//
+	// Note: PR #38 created indexes without deadline predicate. We drop and recreate
+	// to ensure upgraded databases get the improved definitions.
+	// Using partial indexes with WHERE state='live' to reduce index size.
 	if err := DB.Exec(`
+		-- Drop old indexes from PR #38 (missing deadline predicate)
+		DROP INDEX IF EXISTS idx_campaigns_trending;
+		DROP INDEX IF EXISTS idx_campaigns_newest;
+		DROP INDEX IF EXISTS idx_campaigns_ending;
+		DROP INDEX IF EXISTS idx_campaigns_category_trending;
+		
 		-- Trending/Hot queries (with and without category filter)
-		CREATE INDEX IF NOT EXISTS idx_campaigns_trending 
+		CREATE INDEX idx_campaigns_trending 
 		ON campaigns(state, deadline, velocity_24h DESC, percent_funded DESC) 
 		WHERE state = 'live';
 		
-		CREATE INDEX IF NOT EXISTS idx_campaigns_category_trending 
+		CREATE INDEX idx_campaigns_category_trending 
 		ON campaigns(state, deadline, category_id, velocity_24h DESC, percent_funded DESC) 
 		WHERE state = 'live';
 		
 		-- Newest queries (with and without category filter)
-		CREATE INDEX IF NOT EXISTS idx_campaigns_newest 
+		CREATE INDEX idx_campaigns_newest 
 		ON campaigns(state, deadline, first_seen_at DESC) 
 		WHERE state = 'live';
 		
@@ -177,7 +187,7 @@ func Init(cfg *config.Config) error {
 		WHERE state = 'live';
 		
 		-- Ending queries (with and without category filter)
-		CREATE INDEX IF NOT EXISTS idx_campaigns_ending 
+		CREATE INDEX idx_campaigns_ending 
 		ON campaigns(state, deadline ASC) 
 		WHERE state = 'live';
 		
