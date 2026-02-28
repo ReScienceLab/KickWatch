@@ -39,7 +39,7 @@ struct CampaignRowView: View {
             fundingBar
             HStack(spacing: 8) {
                 stateBadge
-                Text("\(Int(campaign.percent_funded ?? 0))% funded")
+                Text("\(formatPercentFunded(campaign.percent_funded ?? 0)) funded")
                     .font(.caption2).foregroundStyle(.secondary)
                 if let deadline = campaign.deadline, let date = ISO8601DateFormatter().date(from: deadline) {
                     let days = max(0, Calendar.current.dateComponents([.day], from: .now, to: date).day ?? 0)
@@ -115,6 +115,15 @@ struct CampaignRowView: View {
             return String(format: "$%.0fK", amount / 1_000)
         }
         return "$\(Int(amount))"
+    }
+
+    private func formatPercentFunded(_ percent: Double) -> String {
+        if percent >= 10_000 {
+            return String(format: "%.1fK%%", percent / 1_000)
+        } else if percent >= 1_000 {
+            return String(format: "%.2fK%%", percent / 1_000)
+        }
+        return String(format: "%.0f%%", percent)
     }
 
     private func stateLabel(_ state: String) -> String {

@@ -130,7 +130,8 @@ struct CampaignDetailView: View {
             Circle().trim(from: 0, to: pct).stroke(Color.accentColor, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 0) {
-                Text("\(Int((campaign.percent_funded ?? 0)))%").font(.title2).fontWeight(.bold)
+                Text(formatPercentFunded(campaign.percent_funded ?? 0))
+                    .font(.title2).fontWeight(.bold)
                 Text("funded").font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -168,6 +169,16 @@ struct CampaignDetailView: View {
         if amount >= 1_000_000 { return "\(sym)\(String(format: "%.1fM", amount / 1_000_000))" }
         if amount >= 1_000 { return "\(sym)\(String(format: "%.0fK", amount / 1_000))" }
         return "\(sym)\(Int(amount))"
+    }
+
+    private func formatPercentFunded(_ percent: Double) -> String {
+        // For very high percentages, format as "18.9K%" for readability
+        if percent >= 10_000 {
+            return String(format: "%.1fK%%", percent / 1_000)
+        } else if percent >= 1_000 {
+            return String(format: "%.2fK%%", percent / 1_000)
+        }
+        return String(format: "%.0f%%", percent)
     }
 
     @ToolbarContentBuilder
