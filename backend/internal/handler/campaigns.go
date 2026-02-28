@@ -27,8 +27,8 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			limit = 50
 		}
 
-		// "hot" sort: served from DB by velocity_24h with offset-based pagination
-		if sort == "hot" && db.IsEnabled() {
+		// All client requests now served from DB to save ScrapingBee credits
+		if db.IsEnabled() {
 			offset := 0
 			if cursor != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(cursor); err == nil {
@@ -37,7 +37,20 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			}
 
 			var campaigns []model.Campaign
-			q := db.DB.Where("state = 'live'").Order("velocity_24h DESC").Offset(offset).Limit(limit + 1)
+			q := db.DB.Where("state = 'live'").Offset(offset).Limit(limit + 1)
+			
+			// Map sort to DB columns
+			switch sort {
+			case "trending", "hot":
+				q = q.Order("velocity_24h DESC, percent_funded DESC")
+			case "newest":
+				q = q.Order("first_seen_at DESC")
+			case "ending":
+				q = q.Order("deadline ASC")
+			default:
+				q = q.Order("velocity_24h DESC, percent_funded DESC")
+			}
+			
 			if categoryID != "" {
 				q = q.Where("category_id = ?", categoryID)
 			}
@@ -57,8 +70,10 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 				c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nextCursor, "total": len(campaigns)})
 				return
 			}
+			// If DB query fails, fall through to ScrapingBee fallback
 		}
 
+		// Fallback to ScrapingBee only if DB unavailable (should rarely happen)
 		gqlSort, ok := sortMap[sort]
 		if !ok {
 			gqlSort = "MAGIC"
@@ -66,19 +81,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 
 		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
 		if err != nil {
-			// fallback to DB if GraphQL fails
-			if db.IsEnabled() {
-				var campaigns []model.Campaign
-				q := db.DB.Where("state = 'live'").Order("last_updated_at DESC").Limit(limit)
-				if categoryID != "" {
-					q = q.Where("category_id = ?", categoryID)
-				}
-				if dbErr := q.Find(&campaigns).Error; dbErr == nil && len(campaigns) > 0 {
-					c.JSON(http.StatusOK, gin.H{"campaigns": campaigns, "next_cursor": nil, "total": len(campaigns)})
-					return
-				}
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database and API unavailable"})
 			return
 		}
 
