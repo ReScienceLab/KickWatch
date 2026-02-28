@@ -141,7 +141,10 @@ func ListCategories(client *service.KickstarterScrapingService) gin.HandlerFunc 
 func GetCampaignHistory(c *gin.Context) {
 	pid := c.Param("pid")
 	days := c.DefaultQuery("days", "14")
-	daysInt, _ := strconv.Atoi(days)
+	daysInt, err := strconv.Atoi(days)
+	if err != nil || daysInt < 1 {
+		daysInt = 14
+	}
 	if daysInt > 30 {
 		daysInt = 30
 	}

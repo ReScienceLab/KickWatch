@@ -63,7 +63,8 @@ struct CampaignDetailView: View {
             }
 
             if let velocity = campaign.velocity_24h,
-               let delta = campaign.pledge_delta_24h {
+               let delta = campaign.pledge_delta_24h,
+               velocity > 0 || delta != 0 {
                 momentumSection(velocity: velocity, delta: delta)
             }
 
