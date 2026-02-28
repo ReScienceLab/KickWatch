@@ -55,11 +55,14 @@ struct CampaignDetailView: View {
                         .background(Color(.systemGray5)).clipShape(Capsule())
                 }
             }
+            .padding(.horizontal)
 
             fundingStats
+                .padding(.horizontal)
 
             if let blurb = campaign.blurb, !blurb.isEmpty {
                 ExpandableBlurbView(blurb: blurb)
+                    .padding(.horizontal)
             }
 
             // Show momentum section if we have history data OR if there's 24h activity
@@ -70,6 +73,7 @@ struct CampaignDetailView: View {
                     velocity: campaign.velocity_24h ?? 0,
                     delta: campaign.pledge_delta_24h ?? 0
                 )
+                .padding(.horizontal)
             }
 
             if let url = campaign.project_url, let link = URL(string: url) {
@@ -81,9 +85,9 @@ struct CampaignDetailView: View {
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .padding(.horizontal)
             }
         }
-        .padding()
     }
 
     private var fundingStats: some View {
