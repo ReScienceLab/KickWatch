@@ -59,12 +59,12 @@ func (t *TranslatorService) TranslateCampaigns(campaigns []model.Campaign) error
 		return nil
 	}
 
-	// Use Gemini 2.0 Flash via Vertex AI (uses startup credits)
-	model := t.client.GenerativeModel("gemini-2.0-flash-exp")
+	// Use Gemini 1.5 Flash (stable model with higher quotas than experimental)
+	model := t.client.GenerativeModel("gemini-1.5-flash-002")
 	model.SetTemperature(0.3) // Lower temperature for more consistent translations
 
-	// Batch translate in groups of 10 to avoid token limits
-	const batchSize = 10
+	// Batch translate in groups of 5 to stay within rate limits
+	const batchSize = 5
 	for i := 0; i < len(campaigns); i += batchSize {
 		end := i + batchSize
 		if end > len(campaigns) {
@@ -78,9 +78,9 @@ func (t *TranslatorService) TranslateCampaigns(campaigns []model.Campaign) error
 			continue
 		}
 
-		// Rate limiting: small delay between batches
+		// Rate limiting: 2-second delay between batches to avoid quota exhaustion
 		if end < len(campaigns) {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 		}
 	}
 
