@@ -177,21 +177,28 @@ func Init(cfg *config.Config) error {
 		return fmt.Errorf("pre-migrate campaign_snapshots columns: %w", err)
 	}
 
+	// Drop existing unique index if it exists (from previous failed migrations).
+	// This allows us to clean up duplicate data without constraint violations.
+	DB.Exec(`DROP INDEX IF EXISTS idx_campaign_snapshot_date`)
+
+	// Delete all snapshots with NULL snapshot_date (should not exist after migration).
+	deleteNull := DB.Exec(`DELETE FROM campaign_snapshots WHERE snapshot_date IS NULL`)
+	log.Printf("DB init: deleted %d snapshots with NULL snapshot_date", deleteNull.RowsAffected)
+
 	// Deduplicate snapshots: keep only the latest per (campaign_pid, snapshot_date).
-	// Run this EVERY time to handle legacy duplicate data from buggy upsert logic.
-	// Must run BEFORE AutoMigrate attempts to create the unique index.
-	result := DB.Exec(`
-		DELETE FROM campaign_snapshots a USING campaign_snapshots b
-		WHERE a.campaign_pid = b.campaign_pid
-		  AND a.snapshot_date IS NOT NULL
-		  AND b.snapshot_date IS NOT NULL
-		  AND a.snapshot_date = b.snapshot_date
-		  AND a.snapshot_at < b.snapshot_at
+	// Use DISTINCT ON for efficiency - keeps row with MAX(snapshot_at) for each (pid, date) pair.
+	dedup := DB.Exec(`
+		DELETE FROM campaign_snapshots
+		WHERE id NOT IN (
+			SELECT DISTINCT ON (campaign_pid, snapshot_date) id
+			FROM campaign_snapshots
+			ORDER BY campaign_pid, snapshot_date, snapshot_at DESC
+		)
 	`)
-	if result.Error != nil {
-		return fmt.Errorf("deduplicate campaign_snapshots: %w", result.Error)
+	if dedup.Error != nil {
+		return fmt.Errorf("deduplicate campaign_snapshots: %w", dedup.Error)
 	}
-	log.Printf("DB init: deduplicated %d snapshot rows", result.RowsAffected)
+	log.Printf("DB init: deduplicated %d snapshot rows", dedup.RowsAffected)
 
 	// NOW run AutoMigrate after all column renames are complete
 	if err := DB.AutoMigrate(
