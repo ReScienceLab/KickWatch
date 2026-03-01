@@ -60,7 +60,7 @@ func (t *TranslatorService) TranslateCampaigns(campaigns []model.Campaign) error
 	}
 
 	// Use Gemini 1.5 Flash (stable model with higher quotas than experimental)
-	model := t.client.GenerativeModel("gemini-1.5-flash-002")
+	model := t.client.GenerativeModel("gemini-1.5-flash-001")
 	model.SetTemperature(0.3) // Lower temperature for more consistent translations
 
 	// Batch translate in groups of 5 to stay within rate limits
