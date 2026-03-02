@@ -29,6 +29,10 @@ func NewKickstarterScrapingService(apiKey string, maxConcurrent int) *Kickstarte
 // Note: AI extraction was removed — Kickstarter embeds project data in [data-project]
 // HTML attributes, not text nodes, so ScrapingBee AI returns EMPTY_RESPONSE for that selector.
 func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor string, first int) (*SearchResult, error) {
+	return s.SearchWithState(term, categoryID, sort, cursor, first, "")
+}
+
+func (s *KickstarterScrapingService) SearchWithState(term, categoryID, sort, cursor string, first int, state string) (*SearchResult, error) {
 	ctx := context.Background()
 
 	// Parse page from cursor (cursor format: "page:N")
@@ -40,6 +44,9 @@ func (s *KickstarterScrapingService) Search(term, categoryID, sort, cursor strin
 	}
 
 	discoverURL := s.buildDiscoverURL(term, categoryID, sort, page)
+	if state != "" && state != "live" {
+		discoverURL += "&state=" + state
+	}
 
 	html, err := s.client.FetchHTMLInSession(ctx, discoverURL, 0)
 	if err != nil {

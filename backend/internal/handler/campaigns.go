@@ -26,6 +26,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 		sort := c.DefaultQuery("sort", "trending")
 		categoryID := c.Query("category_id")
 		cursor := c.Query("cursor")
+		state := c.DefaultQuery("state", "live")
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 		if limit > 50 {
 			limit = 50
@@ -58,10 +59,12 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			}
 
 			var campaigns []model.Campaign
-			// Filter: state='live' AND deadline >= NOW() to exclude expired campaigns
-			// Cron only upserts campaigns from discover pages (which only show live ones),
-			// but never marks rows as ended when they disappear/expire.
-			q := db.DB.Where("state = 'live' AND deadline >= ?", time.Now()).Offset(offset).Limit(limit + 1)
+			q := db.DB.Where("state = ?", state).Offset(offset).Limit(limit + 1)
+
+			// Only filter by deadline for live campaigns
+			if state == "live" {
+				q = q.Where("deadline >= ?", time.Now())
+			}
 
 			// Map sort to DB columns
 			switch sort {
@@ -114,7 +117,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			gqlSort = "MAGIC"
 		}
 
-		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
+		result, err := client.SearchWithState("", categoryID, gqlSort, cursor, limit, state)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "database and API unavailable"})
 			return

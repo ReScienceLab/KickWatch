@@ -188,6 +188,95 @@ func (t *TranslatorService) translateBatch(model *genai.GenerativeModel, campaig
 	return nil
 }
 
+// TranslateCategories translates category names that are missing Chinese translations.
+func (t *TranslatorService) TranslateCategories(categories []model.Category) error {
+	var untranslated []model.Category
+	for _, c := range categories {
+		if c.NameZh == "" {
+			untranslated = append(untranslated, c)
+		}
+	}
+	if len(untranslated) == 0 {
+		return nil
+	}
+
+	model := t.client.GenerativeModel("gemini-2.0-flash-001")
+	model.SetTemperature(0.3)
+
+	type catInput struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	type catOutput struct {
+		ID     string `json:"id"`
+		NameZh string `json:"name_zh"`
+	}
+
+	const batchSize = 20
+	for i := 0; i < len(untranslated); i += batchSize {
+		end := i + batchSize
+		if end > len(untranslated) {
+			end = len(untranslated)
+		}
+		batch := untranslated[i:end]
+
+		inputs := make([]catInput, len(batch))
+		for j, c := range batch {
+			inputs[j] = catInput{ID: c.ID, Name: c.Name}
+		}
+		inputJSON, _ := json.MarshalIndent(inputs, "", "  ")
+
+		prompt := fmt.Sprintf(`将以下 Kickstarter 分类名称翻译成中文。输出 JSON 数组，每个元素包含 id 和 name_zh。
+
+输入：
+%s
+
+直接输出 JSON 数组，不要有其他文字：`, string(inputJSON))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+		cancel()
+		if err != nil {
+			log.Printf("Translator: category batch %d-%d error: %v", i, end-1, err)
+			continue
+		}
+
+		if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+			continue
+		}
+
+		responseText := fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0])
+		responseText = strings.TrimSpace(responseText)
+		responseText = strings.TrimPrefix(responseText, "```json")
+		responseText = strings.TrimPrefix(responseText, "```")
+		responseText = strings.TrimSuffix(responseText, "```")
+		responseText = strings.TrimSpace(responseText)
+
+		var outputs []catOutput
+		if err := json.Unmarshal([]byte(responseText), &outputs); err != nil {
+			log.Printf("Translator: failed to parse category response: %v", err)
+			continue
+		}
+
+		idMap := make(map[string]string)
+		for _, out := range outputs {
+			idMap[out.ID] = out.NameZh
+		}
+
+		for j := range categories {
+			if zh, ok := idMap[categories[j].ID]; ok && zh != "" {
+				categories[j].NameZh = zh
+			}
+		}
+
+		log.Printf("Translator: translated %d category names", len(outputs))
+		if end < len(untranslated) {
+			time.Sleep(2 * time.Second)
+		}
+	}
+	return nil
+}
+
 // Close releases resources held by the translator.
 func (t *TranslatorService) Close() error {
 	if t.client != nil {

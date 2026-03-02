@@ -200,6 +200,41 @@ func Init(cfg *config.Config) error {
 	}
 	log.Printf("DB init: deduplicated %d snapshot rows", dedup.RowsAffected)
 
+	// Fix duplicate categories: the Vertex AI translation created new category rows
+	// instead of updating existing ones. Merge name_zh from duplicates into originals
+	// and delete the duplicates. Duplicates are identified by having the same name
+	// but different IDs (originals use Kickstarter IDs like "1", "3", etc.).
+	if err := DB.Exec(`
+		DO $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'categories') THEN
+				-- Update originals with name_zh from duplicates (match by name, prefer non-empty name_zh)
+				UPDATE categories orig
+				SET name_zh = dup.name_zh
+				FROM categories dup
+				WHERE orig.name = dup.name
+					AND orig.id <> dup.id
+					AND (orig.name_zh IS NULL OR orig.name_zh = '')
+					AND dup.name_zh IS NOT NULL
+					AND dup.name_zh <> '';
+
+				-- Delete duplicate categories that don't use Kickstarter numeric IDs
+				-- Original categories have short numeric IDs (1-999), duplicates have longer/encoded IDs
+				DELETE FROM categories
+				WHERE id IN (
+					SELECT c2.id
+					FROM categories c1
+					JOIN categories c2 ON c1.name = c2.name AND c1.id <> c2.id
+					WHERE LENGTH(c1.id) <= 3 AND c1.id ~ '^[0-9]+$'
+						AND (LENGTH(c2.id) > 3 OR c2.id !~ '^[0-9]+$')
+				);
+			END IF;
+		END
+		$$;
+	`).Error; err != nil {
+		log.Printf("DB init: category dedup warning: %v", err)
+	}
+
 	// NOW run AutoMigrate after all column renames are complete
 	if err := DB.AutoMigrate(
 		&model.Campaign{},

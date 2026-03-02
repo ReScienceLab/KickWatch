@@ -31,6 +31,9 @@ type CronService struct {
 	apnsClient      *APNsClient
 	translator      *TranslatorService
 	scheduler       *cron.Cron
+	LastCrawlAt     time.Time
+	LastCrawlCount  int
+	LastCrawlError  string
 }
 
 func NewCronService(db *gorm.DB, scrapingService *KickstarterScrapingService, apns *APNsClient, translator *TranslatorService) *CronService {
@@ -48,6 +51,8 @@ func (s *CronService) Start() {
 		log.Println("Cron: starting nightly crawl")
 		if err := s.RunCrawlNow(); err != nil {
 			log.Printf("Cron: crawl error: %v", err)
+			s.LastCrawlError = err.Error()
+			s.LastCrawlAt = time.Now()
 		}
 	})
 	s.scheduler.Start()
@@ -79,8 +84,8 @@ func (s *CronService) Stop() {
 	s.scheduler.Stop()
 }
 
-// syncCategories upserts the canonical category list into the DB so that
-// clients and alert filters always see the current IDs and subcategories.
+// syncCategories upserts the canonical category list into the DB and
+// translates any categories missing Chinese translations.
 func (s *CronService) syncCategories() {
 	result := s.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
@@ -90,6 +95,25 @@ func (s *CronService) syncCategories() {
 		log.Printf("Cron: category sync error: %v", result.Error)
 	} else {
 		log.Printf("Cron: synced %d categories", len(kickstarterCategories))
+	}
+
+	// Translate any categories missing name_zh
+	if s.translator != nil {
+		var allCats []model.Category
+		if err := s.db.Find(&allCats).Error; err != nil {
+			log.Printf("Cron: fetch categories for translation error: %v", err)
+			return
+		}
+		if err := s.translator.TranslateCategories(allCats); err != nil {
+			log.Printf("Cron: category translation error: %v", err)
+			return
+		}
+		// Update translated categories back to DB
+		for _, cat := range allCats {
+			if cat.NameZh != "" {
+				s.db.Model(&model.Category{}).Where("id = ?", cat.ID).Update("name_zh", cat.NameZh)
+			}
+		}
 	}
 }
 
@@ -170,6 +194,10 @@ func (s *CronService) RunCrawlNow() error {
 		}
 	}
 	log.Printf("Cron: crawl done, upserted %d campaigns", upserted)
+
+	s.LastCrawlAt = time.Now()
+	s.LastCrawlCount = upserted
+	s.LastCrawlError = ""
 
 	// Sanity check: a full crawl across all categories should always yield
 	// at least some campaigns. Zero almost certainly means a parse failure
