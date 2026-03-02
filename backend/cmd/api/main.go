@@ -104,6 +104,7 @@ func main() {
 
 		if cronSvc != nil {
 			api.POST("/admin/backfill", handler.TriggerBackfill(cronSvc))
+			api.GET("/admin/cron-status", handler.CronStatus(cronSvc))
 		}
 	}
 
