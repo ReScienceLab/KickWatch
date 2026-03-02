@@ -51,6 +51,8 @@ func (s *CronService) Start() {
 		log.Println("Cron: starting nightly crawl")
 		if err := s.RunCrawlNow(); err != nil {
 			log.Printf("Cron: crawl error: %v", err)
+			s.LastCrawlError = err.Error()
+			s.LastCrawlAt = time.Now()
 		}
 	})
 	s.scheduler.Start()

@@ -117,7 +117,7 @@ func ListCampaigns(client *service.KickstarterScrapingService) gin.HandlerFunc {
 			gqlSort = "MAGIC"
 		}
 
-		result, err := client.Search("", categoryID, gqlSort, cursor, limit)
+		result, err := client.SearchWithState("", categoryID, gqlSort, cursor, limit, state)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "database and API unavailable"})
 			return
